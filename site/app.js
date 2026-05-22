@@ -36,11 +36,11 @@ const EMOJI_BURST_PER_TICK = 3;
 const EMOJI_BURST_LIFETIME_MS = 900;
 const MOBILE_DRAWER_SWIPE_THRESHOLD_PX = 36;
 const METERS_PER_MINUTE_PER_MPH = 26.8224;
-const SETTINGS_STORAGE_KEY = "nyc-cartogram-settings-v1";
+const SETTINGS_STORAGE_KEY = "ldn-cartogram-settings-v1";
 
 const EMOJI_BURST_SETS = {
   github: ["💻", "🖥️", "⌨️", "⚙️", "🧑‍💻"],
-  nyc: ["🗽", "🌆", "🏙️", "🚕", "🍎"],
+  london: ["🚇", "🏙️", "🌉", "📍", "🚊"],
   transit: ["🚇", "🚉", "🚊", "🚦", "🛤️"],
   maps: ["🗺️", "📍", "🧭", "➡️", "📌"],
   parks: ["🌳", "🌲", "🌿", "🍃", "🌱"],
@@ -812,7 +812,7 @@ function getShareUrl() {
 }
 
 function getShareText() {
-  return "Explore New York City by subway commute time with this interactive transit cartogram.";
+  return "Explore London by Tube and rail commute time with this interactive transit cartogram.";
 }
 
 function escapeHtml(value) {
@@ -1434,10 +1434,10 @@ function syncReachabilityScore(summary = null) {
   if (!summary) {
     reachScoreCard.hidden = true;
     reachScoreValue.textContent = "-- / --";
-    reachScoreMeta.textContent = "Choose an origin to see how much of the subway you can reach in an hour.";
+    reachScoreMeta.textContent = "Choose an origin to see how much of central London you can reach.";
     if (mobileReachValue && mobileReachMeta) {
       mobileReachValue.textContent = "-- / --";
-      mobileReachMeta.textContent = "Choose an origin to see how much of the subway you can reach in an hour.";
+      mobileReachMeta.textContent = "Choose an origin to see how much of central London you can reach.";
     }
     return;
   }
@@ -1957,7 +1957,7 @@ function drawMap(drawCtx, width, height) {
   if (state.originPoint) {
     const originScreen = projectPoint(state.originPoint);
     drawMarker(drawCtx, originScreen, "#d75c2e", 24, 5.5);
-    drawPinnedLabel(drawCtx, originScreen, currentOriginSummary(station?.name ?? "NYC subway"));
+    drawPinnedLabel(drawCtx, originScreen, currentOriginSummary(station?.name ?? "London rail"));
   } else if (state.cursorScreen) {
     drawMarker(drawCtx, state.cursorScreen, "#d75c2e", 24, 5.5);
   }
@@ -2093,7 +2093,7 @@ function roundRectPath(drawCtx, x, y, width, height, radius) {
   drawCtx.roundRect(x, y, width, height, radius);
 }
 
-function currentOriginSummary(fallbackStationName = "NYC subway") {
+function currentOriginSummary(fallbackStationName = "London rail") {
   if (state.originLabel) return shortOriginLabel(state.originLabel);
   return `Near ${fallbackStationName}`;
 }
@@ -2125,10 +2125,10 @@ function exportShareImage() {
 
   exportCtx.fillStyle = "#17304d";
   exportCtx.font = '700 58px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
-  exportCtx.fillText("New York City", 72, 146);
+  exportCtx.fillText("London", 72, 146);
 
   const nearestSeed = state.currentRender?.warp?.seeds?.[0];
-  const nearestStationName = nearestSeed ? state.data.stations[nearestSeed.index].name : "NYC subway";
+  const nearestStationName = nearestSeed ? state.data.stations[nearestSeed.index].name : "London rail";
   const normalizedOrigin = state.originPoint ? normalizeTravelPoint(state.originPoint) : null;
   const probeMeasurement = state.probePoint
     ? measureProbeFromWarp(normalizedOrigin, state.currentRender?.warp ?? null, state.probePoint)
@@ -2265,12 +2265,12 @@ function exportShareImage() {
 
   exportCtx.fillStyle = "#17304d";
   exportCtx.font = '700 24px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
-  exportCtx.fillText("castrio.me/nyc", 72, 1202);
+  exportCtx.fillText("ldn.connoradams.co.uk", 72, 1202);
 
   exportCtx.textAlign = "right";
   exportCtx.fillStyle = "#5f6f7f";
   exportCtx.font = '500 12px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
-  exportCtx.fillText("Data: MTA GTFS, NYC Open Data, OpenStreetMap", 1008, 1202);
+  exportCtx.fillText("Data: TfL GTFS, ONS Open Geography, OpenStreetMap", 1008, 1202);
   exportCtx.textAlign = "left";
 
   return exportCanvas;
@@ -2287,7 +2287,7 @@ async function downloadShareImage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `nyc-commute-cartogram-${Date.now()}.png`;
+    link.download = `london-commute-cartogram-${Date.now()}.png`;
     link.click();
     URL.revokeObjectURL(url);
   } finally {
@@ -2705,7 +2705,7 @@ function syncMobileSheet() {
 function renderSearchResults(results) {
   clearSearchResults();
   if (!results.length) {
-    setSearchMetaText("No NYC address matches found.");
+    setSearchMetaText("No London address matches found.");
     return;
   }
   setSearchMetaText("Choose a result to pin the origin there.");
@@ -2727,7 +2727,7 @@ function renderSearchResults(results) {
         const result = results[Number(button.dataset.resultIndex)];
         const worldPoint = lonLatToWorld(result.lon, result.lat);
         if (!withinBounds(worldPoint)) {
-          setSearchMetaText("That result fell outside the current NYC map bounds.");
+          setSearchMetaText("That result fell outside the current London map bounds.");
           return;
         }
         setAddressInputs(result.title);
@@ -2748,13 +2748,13 @@ function lonLatToWorld(lon, lat) {
 
 async function searchAddress(query) {
   const params = new URLSearchParams({
-    q: `${query}, New York City`,
+    q: `${query}, London`,
     format: "jsonv2",
     addressdetails: "1",
-    countrycodes: "us",
+    countrycodes: "gb",
     limit: "5",
     bounded: "1",
-    viewbox: "-74.30,40.95,-73.65,40.45",
+    viewbox: "-0.5103,51.6923,0.3340,51.2868",
   });
   const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
     headers: {
@@ -2794,7 +2794,7 @@ function useCurrentLocation() {
       setLocateButtonsBusy(false);
       const worldPoint = lonLatToWorld(position.coords.longitude, position.coords.latitude);
       if (!withinBounds(worldPoint)) {
-        setSearchMetaText("That location falls outside the current NYC map bounds.");
+        setSearchMetaText("That location falls outside the current London map bounds.");
         return;
       }
       state.originLabel = "My location";
@@ -3130,13 +3130,13 @@ async function init() {
       event.preventDefault();
       const query = ui.input.value.trim();
       if (!query) {
-        setSearchMetaText("Enter an NYC address to search.");
+        setSearchMetaText("Enter a London postcode or address to search.");
         clearSearchResults();
         return;
       }
 
       setSearchBusy(true);
-      setSearchMetaText("Looking up NYC address matches…");
+      setSearchMetaText("Looking up London address matches...");
       clearSearchResults();
 
       try {
@@ -3144,7 +3144,7 @@ async function init() {
         renderSearchResults(results);
       } catch (error) {
         console.error(error);
-        setSearchMetaText("Address lookup failed. Try a more specific NYC address.");
+        setSearchMetaText("Address lookup failed. Try a more specific London postcode or address.");
       } finally {
         setSearchBusy(false);
       }

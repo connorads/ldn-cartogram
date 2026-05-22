@@ -25,7 +25,7 @@
 +++++++++                         +++++++++++++=----:---==-=*%%@@@@%%%%%%%%%@@@@@@#++++++++++++++++
 +++++      thanks for stopping by  ++++++++++++==-----===+=**%@@@@@@@@%%%%%%@@@@@@@@*++++++++++++++
 +++                                +++++++++++++++==-===--==++*%%@@@@@@@%%%%%@@@@@@@@%*+++++++++++++
-++  more of my stuff: castrio.me  ++++++++++++++++========-=++*#%%@@@@@%%%%%@@@@@@@@%%%+++++++++++++
+++  more of my stuff: ldn.connoradams.co.uk  +++++========-=++*#%%@@@@@%%%%%@@@@@@@@%%%+++++++++++++
 +++                                      ++++++++++===+***%@@@@@@@@@@@%%@@@@@@@@@@%%@@@%@%*++++++++
 +++++                           ++++++++++++++++++++======+=+**%@@@@@@%@@@@@@@@@@@@@@@%%@@@%*++++++
 +++++++++++++++++++++++++++++++++++++++++++++++++++++#+==-==+*##%%%@@@@@@@@@@@@@@@@@@@%%@@@@@@@*++++
@@ -87,41 +87,35 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NYC Commute POV | Transit Time Cartogram</title>
+    <title>London Commute POV | Tube & Rail Cartogram</title>
     <meta
       name="description"
-      content="Explore New York City by subway commute time with a warped transit cartogram, live origin pinning, and 60-minute reachability scores."
+      content="Explore London by Tube and rail commute time with a warped transit cartogram, click-to-pin origins, and Zone 1 access scores."
     />
-    <link rel="canonical" href="https://castrio.me/nyc/" />
-    <meta property="og:site_name" content="NYC Commute POV" />
+    <link rel="canonical" href="https://ldn.connoradams.co.uk/" />
+    <meta property="og:site_name" content="London Commute POV" />
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="NYC Commute POV | Transit Time Cartogram" />
+    <meta property="og:title" content="London Commute POV | Tube & Rail Cartogram" />
     <meta
       property="og:description"
-      content="Explore New York City by subway commute time with a warped transit cartogram, live origin pinning, and 60-minute reachability scores."
+      content="Explore London by Tube and rail commute time with a warped transit cartogram, click-to-pin origins, and Zone 1 access scores."
     />
-    <meta property="og:url" content="https://castrio.me/nyc/" />
-    <meta property="og:image" content="https://castrio.me/nyc/social.png" />
+    <meta property="og:url" content="https://ldn.connoradams.co.uk/" />
+    <meta property="og:image" content="https://ldn.connoradams.co.uk/social.png" />
     <meta property="og:image:width" content="1638" />
     <meta property="og:image:height" content="1492" />
-    <meta property="og:image:alt" content="Preview of the NYC Commute POV subway commute-time cartogram." />
+    <meta property="og:image:alt" content="Preview of the London Commute POV transit cartogram." />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="NYC Commute POV | Transit Time Cartogram" />
+    <meta name="twitter:title" content="London Commute POV | Tube & Rail Cartogram" />
     <meta
       name="twitter:description"
-      content="Explore New York City by subway commute time with a warped transit cartogram, live origin pinning, and 60-minute reachability scores."
+      content="Explore London by Tube and rail commute time with a warped transit cartogram, click-to-pin origins, and Zone 1 access scores."
     />
-    <meta name="twitter:image" content="https://castrio.me/nyc/social.png" />
-    <meta name="twitter:image:alt" content="Preview of the NYC Commute POV subway commute-time cartogram." />
+    <meta name="twitter:image" content="https://ldn.connoradams.co.uk/social.png" />
+    <meta name="twitter:image:alt" content="Preview of the London Commute POV transit cartogram." />
     <script>
       (function () {
-        const path = window.location.pathname;
-        const isSubpathDeploy = path === "/nyc" || path.startsWith("/nyc/");
-        const assetBase = isSubpathDeploy
-          ? "/nyc/"
-          : path.endsWith("/")
-            ? path
-            : path.slice(0, path.lastIndexOf("/") + 1);
+        const assetBase = "/";
         window.__ASSET_BASE__ = assetBase;
 
         const favicon = document.createElement("link");
@@ -142,7 +136,7 @@
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Transit Time Cartogram</p>
-          <h1>New York City by how long it takes to get there.</h1>
+          <h1>London by how long it takes to get there.</h1>
           <p class="lede">
             Hover over the map to choose an origin. Click to pin it, then move the cursor to read
             commute times back to that pinned point while the city stays warped around it.
@@ -152,10 +146,10 @@
           <form id="searchForm" class="stat search-card" autocomplete="off">
             <label class="stat-label" for="addressInput">Pin by Address</label>
             <div class="search-row">
-              <input id="addressInput" name="address" type="text" placeholder="Search an NYC address" />
+              <input id="addressInput" name="address" type="text" placeholder="Search a London postcode or address" />
               <button id="searchButton" class="pin-button search-button" type="submit">Search</button>
             </div>
-            <div id="searchMeta" class="search-meta">Pin the origin by typing a New York City address.</div>
+            <div id="searchMeta" class="search-meta">Pin the origin by typing a London postcode or address.</div>
             <div id="searchResults" class="search-results" aria-live="polite"></div>
           </form>
         </div>
@@ -218,7 +212,7 @@
             </div>
           </div>
           <div class="map-frame">
-            <canvas id="mapCanvas" aria-label="Warped map of New York City by transit time"></canvas>
+            <canvas id="mapCanvas" aria-label="Warped map of London by transit time"></canvas>
             <div class="map-zoom-controls" aria-label="Map zoom controls">
               <button
                 id="zoomInButton"
@@ -256,7 +250,7 @@
                 <section id="reachScoreCard" class="map-score-card desktop-help-reach" aria-live="polite" hidden>
                   <span class="map-score-label">60-Minute Reach</span>
                   <strong id="reachScoreValue" class="map-score-value">-- / --</strong>
-                  <p id="reachScoreMeta" class="map-score-meta">Choose an origin to see how much of the subway you can reach in an hour.</p>
+                  <p id="reachScoreMeta" class="map-score-meta">Choose an origin to see how much of central London you can reach.</p>
                 </section>
                 <button
                   id="mobileInstructionsLocateButton"
@@ -356,7 +350,7 @@
                   <span class="mobile-sheet-stat-label">60-Minute Reach</span>
                   <strong id="mobileReachValue" class="mobile-sheet-stat-value">-- / --</strong>
                   <p id="mobileReachMeta" class="mobile-sheet-stat-meta">
-                    Choose an origin to see how much of the subway you can reach in an hour.
+                    Choose an origin to see how much of central London you can reach.
                   </p>
                 </div>
               </div>
@@ -413,7 +407,7 @@
                     id="mobileAddressInput"
                     name="address"
                     type="text"
-                    placeholder="Search an NYC address"
+                    placeholder="Search a London postcode or address"
                   />
                   <button id="mobileSearchButton" class="pin-button mobile-search-button" type="submit">
                     Search
@@ -439,26 +433,23 @@
 
       <section class="notes">
         <p>
-          Travel times are estimated from MTA GTFS subway trips plus short walking access to and
-          from stations. The map is transit-only for now and does not yet include bus service
-          or real-time schedules. The only ferry service included is the Staten Island Ferry. Check out the <a href="https://github.com/AntCas/nyc-cartogram/tree/main" target="_blank" rel="noreferrer">GitHub</a> for more details.
+          Travel times are estimated from TfL rail trips plus short walking access to and
+          from stations. The map is rail-only for now and does not yet include bus service,
+          Overground, Elizabeth line, or real-time schedules. Check out the <a href="https://github.com/connorads/ldn-cartogram" target="_blank" rel="noreferrer">GitHub</a> for more details.
         </p>
       </section>
 
       <footer class="footer-strip">
         <div class="footer-links">
-          <a href="https://data.cityofnewyork.us/resource/gthc-hcne.geojson?$limit=100" target="_blank" rel="noreferrer" data-emoji-burst="nyc">NYC borough boundaries</a>
-          <a href="https://new.mta.info/developers" target="_blank" rel="noreferrer" data-emoji-burst="transit">MTA GTFS subway data</a>
+          <a href="https://geoportal.statistics.gov.uk/" target="_blank" rel="noreferrer" data-emoji-burst="london">London borough boundaries</a>
+          <a href="https://www.transit.land/feeds/f-transport~for~london" target="_blank" rel="noreferrer" data-emoji-burst="transit">TfL GTFS rail data</a>
           <a href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" data-emoji-burst="maps">OpenStreetMap streets</a>
-          <a href="https://www.nycgovparks.org/about/health-and-safety-guide/open-data" target="_blank" rel="noreferrer" data-emoji-burst="parks">NYC Parks open space</a>
+          <a href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" data-emoji-burst="parks">OpenStreetMap open space</a>
         </div>
         <p class="footer-credit">
           Made with Codex GPT-5.4 by
-          <a href="https://castrio.me" target="_blank" rel="noreferrer" data-emoji-burst="anthony">Anthony Castrio</a>.
-          <a href="https://github.com/AntCas/nyc-cartogram/tree/main" target="_blank" rel="noreferrer" data-emoji-burst="github">GitHub</a>
-          <a href="https://twitter.com/AnthonyCastrio" target="_blank" rel="noreferrer" data-emoji-burst="twitter">Twitter</a>
-          <a href="https://www.linkedin.com/in/AntCas" target="_blank" rel="noreferrer" data-emoji-burst="linkedin">LinkedIn</a>
-          <a href="https://buymeacoffee.com/AntCas" target="_blank" rel="noreferrer" data-emoji-burst="coffee">Buy Me a Coffee</a>
+          <a href="https://connoradams.co.uk" target="_blank" rel="noreferrer" data-emoji-burst="anthony">Connor Adams</a>.
+          <a href="https://github.com/connorads/ldn-cartogram" target="_blank" rel="noreferrer" data-emoji-burst="github">GitHub</a>
         </p>
       </footer>
     </div>
