@@ -98,7 +98,7 @@ Global verification rules:
 
 ---
 
-### [ ] **CC-2: Stage new source data files in `data/`** | **Size: S** | **Deps: none**
+### [x] **CC-2: Stage new source data files in `data/`** | **Size: S** | **Deps: none**
 
 **Problem:** The build scripts will need four new data inputs (TfL GTFS, TfL OSI, ONS borough boundaries, TfL Stations.csv). They don't exist in `data/` yet. Staging them first means subsequent build tasks can reference them without each task fetching files.
 
