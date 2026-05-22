@@ -126,7 +126,7 @@ Global verification rules:
 
 ## Phase 2 — Build pipeline data swap
 
-### [ ] **BUILD-1: Swap GTFS source to Transitland TfL feed** | **Size: M** | **Deps: CC-2**
+### [x] **BUILD-1: Swap GTFS source to Transitland TfL feed** | **Size: M** | **Deps: CC-2**
 
 **Problem:** `build_commute_site_data.py` reads `data/mta_gtfs_subway.zip` and assumes MTA's agency layout (one subway agency + Staten Island Ferry). The new source is `data/tfl_gtfs.zip` with six TfL agencies (LUL, DLR, TCL, CV, WFF, CAB).
 

@@ -13,3 +13,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** 0edb2b4
 - **Verification:** all six staged files are non-empty; `data/tfl_osi.ods` opens as an ODS zip; `data/tfl_gtfs.zip` lists the expected GTFS files; `data/uk_lad_boundaries.geojson` exposes ONS `LAD24CD`/`LAD24NM` properties; generated TfL station CSV has 473 rows, 396 with zones.
 - **Surprises:** TfL's documented station CSV URL now returns 404, so the station CSV was generated from current TfL StopPoint mode responses; the ONS BFC GeoJSON is 190 MB and is tracked with Git LFS.
+
+## 2026-05-22T23:56:28Z | BUILD-1 | done
+
+- **Commit:** af129cf
+- **Verification:** `python3 build_commute_site_data.py` completed and printed `Loaded 6 agencies, 19 routes, 74093 trips across 4 agencies, 359 stations`; spot-check found `Oxford Circus Underground Station`, `Bank DLR Station`, `Bank Underground Station`, `Stratford DLR Station`, and `Stratford Underground Station`; `git grep -n "mta_gtfs_subway" -- build_commute_site_data.py` returned no matches.
+- **Surprises:** the staged Transitland feed has CV and WFF routes but no trips for those agencies; Transitland's current static GTFS URL now requires a token, so the staged feed could not be refreshed anonymously.

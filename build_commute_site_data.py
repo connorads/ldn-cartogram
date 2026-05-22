@@ -21,7 +21,7 @@ SITE_DATA_PATH = ROOT / "site" / "data" / "commute_map_data.json"
 BOROUGHS_PATH = DATA_DIR / "borough_boundaries.geojson"
 PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
 STREETS_PATH = DATA_DIR / "osm_major_streets.json"
-GTFS_PATH = DATA_DIR / "mta_gtfs_subway.zip"
+GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
 COUNTIES_KML_ZIP_PATH = DATA_DIR / "cb_2024_us_county_500k.zip"
 
 GRID_COLS = 160
@@ -40,6 +40,7 @@ INTER_COMPLEX_WALK_PENALTY = 2.0
 DEFAULT_BOARD_WAIT = 4.0
 TRANSFER_PENALTY = 4.0
 INTER_COMPLEX_TRANSFER_PENALTY = 7.0
+IN_SCOPE_AGENCIES = {"LUL", "DLR", "TCL", "CV", "WFF", "CAB"}
 STATEN_ISLAND_FERRY_ROUTE_ID = "SIF"
 STATEN_ISLAND_FERRY_WAIT = 7.5
 STATEN_ISLAND_FERRY_TRAVEL_MINUTES = 25.0
@@ -357,52 +358,56 @@ def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
+def load_in_scope_agencies() -> set[str]:
+    agency_ids = {row["agency_id"] for row in read_csv_from_zip(GTFS_PATH, "agency.txt")}
+    return agency_ids & IN_SCOPE_AGENCIES
+
+
 def build_station_data(lat0: float) -> Tuple[list, Dict[str, int], Dict[str, str]]:
     complex_info: Dict[str, dict] = {}
     stop_to_complex: Dict[str, str] = {}
 
-    for row in load_json(DATA_DIR / "subway_stations.json"):
-        complex_id = row["complex_id"]
-        stop_code = row["gtfs_stop_id"]
-        stop_to_complex[stop_code] = complex_id
-        stop_to_complex[f"{stop_code}N"] = complex_id
-        stop_to_complex[f"{stop_code}S"] = complex_id
+    for row in read_csv_from_zip(GTFS_PATH, "stops.txt"):
+        stop_id = row["stop_id"]
+        station_id = row["stop_name"]
+        stop_to_complex[stop_id] = station_id
         info = complex_info.setdefault(
-            complex_id,
+            station_id,
             {
-                "id": complex_id,
-                "name": row["stop_name"],
-                "point": lonlat_to_xy(float(row["gtfs_longitude"]), float(row["gtfs_latitude"]), lat0),
+                "id": station_id,
+                "name": station_id,
+                "points": [],
                 "routes": set(),
             },
         )
-        routes = (row.get("daytime_routes") or "").split()
-        info["routes"].update(route for route in routes if route)
+        info["points"].append(lonlat_to_xy(float(row["stop_lon"]), float(row["stop_lat"]), lat0))
 
     stations = []
     station_index_by_id: Dict[str, int] = {}
-    for complex_id, info in sorted(complex_info.items(), key=lambda item: int(item[0])):
+    for complex_id, info in sorted(complex_info.items()):
+        points = info.pop("points")
+        info["point"] = (
+            sum(point[0] for point in points) / len(points),
+            sum(point[1] for point in points) / len(points),
+        )
         station_index_by_id[complex_id] = len(stations)
         stations.append(info)
-
-    for row in read_csv_from_zip(GTFS_PATH, "stops.txt"):
-        stop_id = row["stop_id"]
-        parent_station = row.get("parent_station") or ""
-        if stop_id not in stop_to_complex and parent_station and parent_station in stop_to_complex:
-            stop_to_complex[stop_id] = stop_to_complex[parent_station]
 
     return stations, station_index_by_id, stop_to_complex
 
 
 def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]) -> Tuple[dict, list, dict]:
+    in_scope_agencies = load_in_scope_agencies()
     route_styles = {}
     for row in read_csv_from_zip(GTFS_PATH, "routes.txt"):
-        if row.get("route_type") != "1" and row.get("route_id") != "SI":
+        agency_id = row.get("agency_id", "")
+        if agency_id not in in_scope_agencies:
             continue
         route_styles[row["route_id"]] = {
             "color": f"#{row['route_color'] or '808183'}",
             "textColor": f"#{row['route_text_color'] or 'FFFFFF'}",
             "label": row["route_short_name"] or row["route_id"],
+            "agencyId": agency_id,
         }
 
     trips_by_id = {}
@@ -413,6 +418,7 @@ def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]
             continue
         trips_by_id[row["trip_id"]] = {
             "route_id": route_id,
+            "agency_id": route_styles[route_id]["agencyId"],
             "direction_id": row.get("direction_id", "0"),
             "service_id": row.get("service_id", ""),
         }
@@ -724,6 +730,17 @@ def main() -> None:
     stations, station_index_by_id, stop_to_complex = build_station_data(lat0)
     route_styles, route_shapes, trips_by_id = build_routes_and_shapes(lat0, bbox)
     route_waits = build_route_waits(trips_by_id)
+    loaded_agencies = load_in_scope_agencies()
+    trip_agencies = {trip["agency_id"] for trip in trips_by_id.values()}
+    print(
+        "Loaded "
+        f"{len(loaded_agencies)} agencies, {len(route_styles)} routes, "
+        f"{len(trips_by_id)} trips across {len(trip_agencies)} agencies, "
+        f"{len(stations)} stations"
+    )
+    missing_trip_agencies = sorted(loaded_agencies - trip_agencies)
+    if missing_trip_agencies:
+        print(f"Agencies without trips in this feed: {', '.join(missing_trip_agencies)}")
     route_states, station_states, adjacency = build_graph(
         stations, station_index_by_id, stop_to_complex, trips_by_id, route_waits
     )
