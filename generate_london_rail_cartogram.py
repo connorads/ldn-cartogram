@@ -23,8 +23,10 @@ DATA_DIR = ROOT / "data"
 OUTPUT_DIR = ROOT / "output"
 
 BOROUGHS_PATH = DATA_DIR / "uk_lad_boundaries.geojson"
-PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
-STREETS_PATH = DATA_DIR / "osm_major_streets.json"
+# Optional London OSM basemap extracts. TODO: add a London Overpass refresh
+# pipeline; until then, do not load stale upstream NYC extracts.
+PARKS_PATH = DATA_DIR / "london_parks.geojson"
+STREETS_PATH = DATA_DIR / "london_major_streets.json"
 GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
 OUTPUT_PATH = OUTPUT_DIR / "london_rail_cartogram.svg"
 

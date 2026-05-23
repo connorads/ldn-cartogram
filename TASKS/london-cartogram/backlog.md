@@ -448,7 +448,7 @@ Global verification rules:
 
 ---
 
-### [ ] **RM-1: Delete NYC-specific data files** | **Size: S** | **Deps: BUILD-1, BUILD-2, SVG-1** *(can only delete after all consumers swapped)*
+### [x] **RM-1: Delete NYC-specific data files** | **Size: S** | **Deps: BUILD-1, BUILD-2, SVG-1** *(can only delete after all consumers swapped)*
 
 **Problem:** After Phase 2 + 3 + 6 swaps, the old NYC data files are unreferenced. Deleting them prevents confusion and reduces repo size.
 

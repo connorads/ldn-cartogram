@@ -24,10 +24,11 @@ BOROUGHS_PATH = DATA_DIR / "uk_lad_boundaries.geojson"
 TFL_OSI_PATH = DATA_DIR / "tfl_osi.ods"
 TRAM_INTERCHANGES_PATH = DATA_DIR / "tram_interchanges.json"
 NEIGHBOURHOOD_LABELS_PATH = DATA_DIR / "neighbourhood_labels.json"
-PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
-STREETS_PATH = DATA_DIR / "osm_major_streets.json"
+# Optional London OSM basemap extracts. TODO: add a London Overpass refresh
+# pipeline; until then, do not load stale upstream NYC extracts.
+PARKS_PATH = DATA_DIR / "london_parks.geojson"
+STREETS_PATH = DATA_DIR / "london_major_streets.json"
 GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
-COUNTIES_KML_ZIP_PATH = DATA_DIR / "cb_2024_us_county_500k.zip"
 
 GRID_COLS = 160
 GRID_ROWS = 160
@@ -444,74 +445,12 @@ def extract_streets(lat0: float, bbox: Tuple[float, float, float, float]) -> lis
     return streets
 
 
-def parse_kml_coordinates(text: str, lat0: float) -> Ring:
-    ring: Ring = []
-    for item in text.replace("\n", " ").split():
-        parts = item.split(",")
-        if len(parts) < 2:
-            continue
-        lon = float(parts[0])
-        lat = float(parts[1])
-        ring.append(lonlat_to_xy(lon, lat, lat0))
-    if ring and ring[0] != ring[-1]:
-        ring.append(ring[0])
-    return ring
-
-
 def build_external_land_polygons(
     lat0: float,
     bbox: Tuple[float, float, float, float],
     borough_polygons: MultiPolygon,
 ) -> list:
-    if not COUNTIES_KML_ZIP_PATH.exists():
-        return []
-
-    include_states = {"NY", "NJ", "CT"}
-    exclude_geoids = {"36005", "36047", "36061", "36081", "36085"}
-    namespace = {"kml": "http://www.opengis.net/kml/2.2"}
-    polygons = []
-
-    with zipfile.ZipFile(COUNTIES_KML_ZIP_PATH) as archive:
-      with archive.open("cb_2024_us_county_500k.kml") as handle:
-        for _, placemark in ET.iterparse(handle, events=("end",)):
-            if not placemark.tag.endswith("Placemark"):
-                continue
-            data = {
-                item.attrib.get("name"): (item.text or "")
-                for item in placemark.findall(".//kml:SimpleData", namespace)
-            }
-            geoid = data.get("GEOID")
-            stusps = data.get("STUSPS")
-            if geoid in exclude_geoids or stusps not in include_states:
-                placemark.clear()
-                continue
-
-            multipolygon: MultiPolygon = []
-            for polygon_node in placemark.findall(".//kml:Polygon", namespace):
-                rings = []
-                for ring_node in polygon_node.findall("./kml:outerBoundaryIs/kml:LinearRing/kml:coordinates", namespace):
-                    ring = parse_kml_coordinates(ring_node.text or "", lat0)
-                    if len(ring) >= 4:
-                        rings.append(simplify_ring(ring, 120.0))
-                for ring_node in polygon_node.findall("./kml:innerBoundaryIs/kml:LinearRing/kml:coordinates", namespace):
-                    ring = parse_kml_coordinates(ring_node.text or "", lat0)
-                    if len(ring) >= 4:
-                        rings.append(simplify_ring(ring, 120.0))
-                if rings:
-                    multipolygon.append(rings)
-
-            visible_polygons = []
-            for polygon in multipolygon:
-                if not bbox_intersects(bounds_of_ring(polygon[0]), bbox):
-                    continue
-                if point_in_multipolygon(polygon_centroid(polygon[0]), borough_polygons):
-                    continue
-                visible_polygons.append([round_path(ring) for ring in polygon])
-            if visible_polygons:
-                polygons.extend(visible_polygons)
-            placemark.clear()
-
-    return polygons
+    return []
 
 
 def read_csv_from_zip(gtfs_path: Path, member: str) -> Iterable[dict]:
