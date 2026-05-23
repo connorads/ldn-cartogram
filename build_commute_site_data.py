@@ -654,7 +654,20 @@ def build_station_data(lat0: float) -> Tuple[list, Dict[str, int], Dict[str, str
     return stations, station_index_by_id, stop_to_complex
 
 
-def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]) -> Tuple[dict, list, dict]:
+def build_route_segments(points: Sequence[Point], gla_polygons: MultiPolygon) -> list:
+    return [
+        {
+            "points": round_path([start, end]),
+            "insideGla": point_in_multipolygon(
+                ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0),
+                gla_polygons,
+            ),
+        }
+        for start, end in zip(points, points[1:])
+    ]
+
+
+def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float], gla_polygons: MultiPolygon) -> Tuple[dict, list, dict]:
     in_scope_agencies = load_in_scope_agencies()
     route_styles = {}
     for row in read_csv_from_zip(GTFS_PATH, "routes.txt"):
@@ -708,6 +721,7 @@ def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]
                 "textColor": route_styles[route_id]["textColor"],
                 "label": route_styles[route_id]["label"],
                 "points": round_path(points),
+                "segments": build_route_segments(points, gla_polygons),
             }
         )
     return route_styles, shapes, trips_by_id
@@ -1078,12 +1092,13 @@ def central_reachability_station_indexes(stations: list, route_styles: dict) -> 
     return [
         station_index
         for station_index, station in enumerate(stations)
-        if REACHABILITY_ZONE in (station.get("zones") or [])
+        if station.get("insideGla", False)
+        and REACHABILITY_ZONE in (station.get("zones") or [])
         and station_agency_ids(station, route_styles) & REACHABILITY_AGENCIES
     ]
 
 
-def nearest_station_accesses(point: Point, stations: list, count: int) -> list[tuple[int, float]]:
+def nearest_station_accesses(point: Point, stations: list, count: int, inside_gla_only: bool = True) -> list[tuple[int, float]]:
     ranked = sorted(
         (
             (
@@ -1092,6 +1107,7 @@ def nearest_station_accesses(point: Point, stations: list, count: int) -> list[t
                 + STATION_ACCESS_PENALTY,
             )
             for station_index, station in enumerate(stations)
+            if not inside_gla_only or station.get("insideGla", False)
         ),
         key=lambda item: item[1],
     )
@@ -1172,13 +1188,17 @@ def add_zone1_reachability_scores(
     return denominator
 
 
+def mark_stations_inside_gla(stations: list, gla_polygons: MultiPolygon) -> None:
+    for station in stations:
+        station["insideGla"] = point_in_multipolygon(station["point"], gla_polygons)
+
+
 def build_grid_cells(polygons: MultiPolygon, stations: list, bbox: Tuple[float, float, float, float]) -> Tuple[list, list]:
     min_x, min_y, max_x, max_y = bbox
     cell_w = (max_x - min_x) / GRID_COLS
     cell_h = (max_y - min_y) / GRID_ROWS
     mask = []
     cells = []
-    station_points = [station["point"] for station in stations]
     for row in range(GRID_ROWS):
         for col in range(GRID_COLS):
             x = min_x + (col + 0.5) * cell_w
@@ -1197,7 +1217,9 @@ def build_grid_cells(polygons: MultiPolygon, stations: list, bbox: Tuple[float, 
                             2,
                         ),
                     )
-                    for station_index, station_point in enumerate(station_points)
+                    for station_index, station in enumerate(stations)
+                    if station.get("insideGla", False)
+                    for station_point in [station["point"]]
                 ),
                 key=lambda item: item[1],
             )[:CELL_NEAREST_STATIONS]
@@ -1223,7 +1245,8 @@ def main() -> None:
     parks = extract_parks(lat0, bbox)
     streets = extract_streets(lat0, bbox)
     stations, station_index_by_id, stop_to_complex = build_station_data(lat0)
-    route_styles, route_shapes, trips_by_id = build_routes_and_shapes(lat0, bbox)
+    mark_stations_inside_gla(stations, all_polygons)
+    route_styles, route_shapes, trips_by_id = build_routes_and_shapes(lat0, bbox, all_polygons)
     route_waits = build_route_waits(trips_by_id, route_styles)
     loaded_agencies = load_in_scope_agencies()
     trip_agencies = {trip["agency_id"] for trip in trips_by_id.values()}
@@ -1298,6 +1321,7 @@ def main() -> None:
                 "id": station["id"],
                 "name": station["name"],
                 "point": round_point(station["point"]),
+                "insideGla": station["insideGla"],
                 "routes": sorted(station["routes"]),
                 "zones": station.get("zones"),
             }

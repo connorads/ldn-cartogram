@@ -352,7 +352,7 @@ Global verification rules:
 
 ---
 
-### [ ] **UI-2: Outside-GLA station rendering at reduced opacity** | **Size: S** | **Deps: BUILD-2**
+### [x] **UI-2: Outside-GLA station rendering at reduced opacity** | **Size: S** | **Deps: BUILD-2**
 
 **Problem:** Stations and route shapes outside the 33 boroughs (Watford, Reading-bound Elizabeth Line stops that we'd have if backfilled, Epping, Epsom, etc.) should still render so the network reads honestly, but at reduced opacity so the GLA stays the focus (Q18). This applies to the interactive map only — the static SVG (SVG-1) uses full opacity.
 

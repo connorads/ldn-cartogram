@@ -32,6 +32,7 @@ const DEFAULT_SWIM_METERS_PER_MINUTE = 28;
 const CENTRAL_REACHABILITY_THRESHOLD_MINUTES = 30;
 const CENTRAL_REACHABILITY_ZONE = 1;
 const CENTRAL_REACHABILITY_AGENCIES = new Set(["LUL", "DLR"]);
+const OUTSIDE_GLA_ALPHA = 0.4;
 const SHARE_COORDINATE_DECIMALS = 5;
 const EMOJI_BURST_INTERVAL_MS = 90;
 const EMOJI_BURST_PER_TICK = 3;
@@ -1175,14 +1176,21 @@ function drawCityBasemap(
   }
 
   for (const route of state.data.routes) {
-    drawCtx.strokeStyle = route.color;
     drawCtx.lineWidth = ROUTE_LINE_WIDTH;
     drawCtx.lineCap = "round";
     drawCtx.lineJoin = "round";
-    drawPolyline(drawCtx, route.points, projectPoint, {
-      tolerance: routeCurveTolerance,
-      maxDepth: curveMaxDepth,
-    });
+    const segments = route.segments?.length
+      ? route.segments
+      : [{ points: route.points, insideGla: true }];
+    for (const segment of segments) {
+      drawCtx.globalAlpha = segment.insideGla ? 1 : OUTSIDE_GLA_ALPHA;
+      drawCtx.strokeStyle = route.color;
+      drawPolyline(drawCtx, segment.points, projectPoint, {
+        tolerance: routeCurveTolerance,
+        maxDepth: curveMaxDepth,
+      });
+    }
+    drawCtx.globalAlpha = 1;
   }
 
   if (includeBoroughBorders) {
@@ -1200,6 +1208,7 @@ function drawCityBasemap(
 function drawStations(drawCtx, projectPoint) {
   for (const station of state.data.stations) {
     const [sx, sy] = projectPoint(station.point);
+    drawCtx.globalAlpha = station.insideGla === false ? OUTSIDE_GLA_ALPHA : 1;
     drawCtx.beginPath();
     drawCtx.arc(sx, sy, 1.35, 0, Math.PI * 2);
     drawCtx.fillStyle = "#ffffff";
@@ -1208,6 +1217,7 @@ function drawStations(drawCtx, projectPoint) {
     drawCtx.strokeStyle = "#5a6e84";
     drawCtx.stroke();
   }
+  drawCtx.globalAlpha = 1;
 }
 
 function drawNeighbourhoodLabels(drawCtx, projectPoint) {
@@ -1329,18 +1339,25 @@ function buildDynamicAdjacency() {
   });
 }
 
-function nearestStations(point, count) {
+function nearestStations(point, count, { insideGlaOnly = true } = {}) {
   const settings = currentTravelSettings();
   return state.data.stations
     .map((station, index) => ({
       index,
       name: station.name,
+      insideGla: station.insideGla !== false,
       walkMinutes:
         distance(point, station.point) / settings.walkingSpeed +
         state.data.meta.stationAccessPenalty,
     }))
+    .filter((station) => !insideGlaOnly || station.insideGla)
     .sort((a, b) => a.walkMinutes - b.walkMinutes)
     .slice(0, count);
+}
+
+function routeStateInsideGla(routeStateIndex) {
+  const stationIndex = state.data.routeStates[routeStateIndex]?.stationIndex;
+  return stationIndex !== undefined && state.data.stations[stationIndex]?.insideGla !== false;
 }
 
 function runDijkstra(origin) {
@@ -1375,6 +1392,7 @@ function runDijkstra(origin) {
     if (current === -1) break;
     visited[current] = true;
     for (const edge of state.dynamicAdjacency[current]) {
+      if (!routeStateInsideGla(edge.toIndex)) continue;
       const weight =
         edge.kind === "ride"
           ? edge.rideMinutes
@@ -1421,6 +1439,7 @@ function estimateTravel(origin, originDistances, destinationPoint) {
 }
 
 function isCentralReachabilityStation(station) {
+  if (station.insideGla === false) return false;
   if (!station.zones?.includes(CENTRAL_REACHABILITY_ZONE)) return false;
   return station.routes.some((routeId) => {
     const agencyId = state.data.routeStyles?.[routeId]?.agencyId;
