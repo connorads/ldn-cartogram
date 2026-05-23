@@ -43,3 +43,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** a725305
 - **Verification:** `python3 build_commute_site_data.py` completed and printed `Zone-tagged stations: 319/359` and `Unmatched LUL/DLR zone stations (0): none`; output check printed `with zones: 319 / 359`; spot checks: Oxford Circus `[1]`, Bank `[1]`, Abbey Road DLR `[2, 3]`, Cutty Sark DLR `[2, 3]`.
 - **Surprises:** TfL station zone values use both `+` and `/` as multi-zone separators, so parsing now handles both.
+
+## 2026-05-23T00:35:59Z | SCO-2 | done
+
+- **Commit:** d17537a
+- **Verification:** `python3 build_commute_site_data.py` completed and printed `Zone 1 reachability denominator: 69 LUL/DLR stations within 30 min threshold`; JSON check found denominator `69`, threshold `30`, and `zone1ReachabilityScore` on all `15,271` cells; `git grep -nE "60[ -]min|60 minute" -- site/` returned no matches; Chromium loaded `http://localhost:8000/site/?origin=51.51768,-0.08224` and rendered Liverpool Street as `67 / 69` (`97%`), then loaded `?origin=51.65151,-0.14906` and rendered Cockfosters as `0 / 69`.
+- **Surprises:** `playwright-cli` could not launch the installed Chrome because that binary rejected one of Playwright's launch flags, so browser smoke verification used headless Chromium directly against the same local HTTP server.
