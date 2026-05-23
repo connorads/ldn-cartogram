@@ -49,3 +49,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** d17537a
 - **Verification:** `python3 build_commute_site_data.py` completed and printed `Zone 1 reachability denominator: 69 LUL/DLR stations within 30 min threshold`; JSON check found denominator `69`, threshold `30`, and `zone1ReachabilityScore` on all `15,271` cells; `git grep -nE "60[ -]min|60 minute" -- site/` returned no matches; Chromium loaded `http://localhost:8000/site/?origin=51.51768,-0.08224` and rendered Liverpool Street as `67 / 69` (`97%`), then loaded `?origin=51.65151,-0.14906` and rendered Cockfosters as `0 / 69`.
 - **Surprises:** `playwright-cli` could not launch the installed Chrome because that binary rejected one of Playwright's launch flags, so browser smoke verification used headless Chromium directly against the same local HTTP server.
+
+## 2026-05-23T00:46:18Z | UI-1 | done
+
+- **Commit:** 4d3be8d
+- **Verification:** `python3 build_commute_site_data.py` completed; JSON check found `20` labels, projected label points, and `0` borough label keys; local HTTP screenshots at `http://localhost:8000/site/` and `?origin=51.51768,-0.08224` showed neighbourhood labels on unwarped and warped maps with no borough-name labels.
+- **Surprises:** Central London labels needed cartographic nudges from their literal centroids, plus a small text-size reduction, to stay readable at the default viewport.
