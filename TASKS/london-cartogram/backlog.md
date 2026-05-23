@@ -397,7 +397,7 @@ Global verification rules:
 
 ---
 
-### [ ] **UI-4: About section scope note for Overground / Elizabeth Line** | **Size: XS** | **Deps: CC-1**
+### [x] **UI-4: About section scope note for Overground / Elizabeth Line** | **Size: XS** | **Deps: CC-1**
 
 **Problem:** v1 ships without Overground and Elizabeth Line. The About section should acknowledge this honestly (Q10/Q17).
 
