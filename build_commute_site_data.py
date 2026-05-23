@@ -25,7 +25,7 @@ TFL_OSI_PATH = DATA_DIR / "tfl_osi.ods"
 TRAM_INTERCHANGES_PATH = DATA_DIR / "tram_interchanges.json"
 NEIGHBOURHOOD_LABELS_PATH = DATA_DIR / "neighbourhood_labels.json"
 # Optional London OSM basemap extracts. TODO: add a London Overpass refresh
-# pipeline; until then, do not load stale upstream NYC extracts.
+# pipeline; until then, do not load stale upstream extracts.
 PARKS_PATH = DATA_DIR / "london_parks.geojson"
 STREETS_PATH = DATA_DIR / "london_major_streets.json"
 GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
@@ -33,8 +33,8 @@ GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
 GRID_COLS = 160
 GRID_ROWS = 160
 MIN_PARK_AREA = 70_000.0
-# Keep walking assumptions close to a normal NYC walking pace so first/last-mile
-# time does not dominate otherwise reasonable subway trips.
+# Keep walking assumptions close to a normal walking pace so first/last-mile
+# time does not dominate otherwise reasonable rail trips.
 WALK_METERS_PER_MINUTE = 80.0
 ACCESS_WALK_METERS_PER_MINUTE = 75.0
 STATION_ACCESS_PENALTY = 3.5
