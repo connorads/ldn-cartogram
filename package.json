@@ -1,5 +1,5 @@
 {
-  "name": "nyc-cartogram",
+  "name": "ldn-cartogram",
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy",
