@@ -250,7 +250,7 @@ Global verification rules:
 
 ## Phase 4 — Score
 
-### [ ] **SCO-1: Station→zone enrichment via TfL Stations.csv join** | **Size: M** | **Deps: BUILD-1, CC-2**
+### [x] **SCO-1: Station→zone enrichment via TfL Stations.csv join** | **Size: M** | **Deps: BUILD-1, CC-2**
 
 **Problem:** GTFS `stops.txt` doesn't include fare zones; the Zone 1 reachability metric (Q12) needs each station tagged with its zone. TfL publishes a CSV with name + zone; we join by name with a small reconciliation table for mismatches.
 

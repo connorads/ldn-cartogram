@@ -560,6 +560,35 @@ def load_tram_interchange_edges() -> list[tuple[str, str, float]]:
     ]
 
 
+def parse_zones(value: str) -> list[int]:
+    zones = []
+    for item in re.split(r"[/,;+ ]+", value.strip()):
+        if not item:
+            continue
+        try:
+            zones.append(int(item))
+        except ValueError:
+            continue
+    return sorted(set(zones))
+
+
+def load_station_zone_index() -> Dict[str, list[int]]:
+    with open(DATA_DIR / "tfl_stations.csv", newline="", encoding="utf-8") as handle:
+        reader = csv.DictReader(handle)
+        fieldnames = reader.fieldnames or []
+        name_column = next((name for name in fieldnames if name.lower() in {"name", "station", "station_name"}), None)
+        zone_column = next((name for name in fieldnames if name.lower() in {"zone", "zones", "fare_zone"}), None)
+        if not name_column or not zone_column:
+            raise ValueError(f"Could not identify station name/zone columns in tfl_stations.csv: {fieldnames}")
+        zone_index: Dict[str, list[int]] = {}
+        for row in reader:
+            station_name = row.get(name_column, "")
+            zones = parse_zones(row.get(zone_column, ""))
+            if station_name and zones:
+                zone_index[canonical_station_name(station_name)] = zones
+        return zone_index
+
+
 def parse_gtfs_time(value: str) -> int:
     hours, minutes, seconds = map(int, value.split(":"))
     return hours * 3600 + minutes * 60 + seconds
@@ -1001,6 +1030,25 @@ def build_adjacency_payload(adjacency: list[dict], fixed_adjacency: list[dict]) 
     return payload
 
 
+def enrich_station_zones(stations: list, route_styles: dict) -> None:
+    zone_index = load_station_zone_index()
+    reconciliation = load_json(DATA_DIR / "tfl_station_zone_reconciliation.json")
+    unmatched_lul_dlr = []
+    tagged_count = 0
+    for station in stations:
+        csv_name = reconciliation.get(station["name"], station["name"])
+        zones = zone_index.get(canonical_station_name(csv_name))
+        if zones:
+            station["zones"] = zones
+            tagged_count += 1
+            continue
+        station_agencies = {route_styles.get(route_id, {}).get("agencyId") for route_id in station["routes"]}
+        if station_agencies & {"LUL", "DLR"}:
+            unmatched_lul_dlr.append(station["name"])
+    print(f"Zone-tagged stations: {tagged_count}/{len(stations)}")
+    print(f"Unmatched LUL/DLR zone stations ({len(unmatched_lul_dlr)}): {', '.join(sorted(unmatched_lul_dlr)) or 'none'}")
+
+
 def build_grid_cells(polygons: MultiPolygon, stations: list, bbox: Tuple[float, float, float, float]) -> Tuple[list, list]:
     min_x, min_y, max_x, max_y = bbox
     cell_w = (max_x - min_x) / GRID_COLS
@@ -1082,6 +1130,7 @@ def main() -> None:
         official_interchanges,
         official_station_pairs,
     )
+    enrich_station_zones(stations, route_styles)
     cells, mask = build_grid_cells(all_polygons, stations, bbox)
 
     output = {
@@ -1114,6 +1163,7 @@ def main() -> None:
                 "name": station["name"],
                 "point": round_point(station["point"]),
                 "routes": sorted(station["routes"]),
+                "zones": station.get("zones"),
             }
             for station in stations
         ],
