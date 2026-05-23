@@ -41,10 +41,11 @@ DEFAULT_BOARD_WAIT = 4.0
 TRANSFER_PENALTY = 4.0
 INTER_COMPLEX_TRANSFER_PENALTY = 7.0
 IN_SCOPE_AGENCIES = {"LUL", "DLR", "TCL", "CV", "WFF", "CAB"}
-STATEN_ISLAND_FERRY_ROUTE_ID = "SIF"
-STATEN_ISLAND_FERRY_WAIT = 7.5
-STATEN_ISLAND_FERRY_TRAVEL_MINUTES = 25.0
-STATEN_ISLAND_FERRY_TERMINALS = ("501", "635")
+AGENCY_WAIT_OVERRIDES = {
+    "CV": 18.0,
+    "WFF": 12.0,
+    "CAB": 8.0,
+}
 
 Point = Tuple[float, float]
 Ring = List[Point]
@@ -606,7 +607,7 @@ def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]
     return route_styles, shapes, trips_by_id
 
 
-def build_route_waits(trips_by_id: dict) -> Dict[str, float]:
+def build_route_waits(trips_by_id: dict, route_styles: dict) -> Dict[str, float]:
     departures_by_route_service: Dict[Tuple[str, str], List[int]] = defaultdict(list)
     current_trip_id = None
     first_departure = None
@@ -641,7 +642,16 @@ def build_route_waits(trips_by_id: dict) -> Dict[str, float]:
     route_waits: Dict[str, float] = {}
     for route_id, waits in waits_by_route.items():
         route_waits[route_id] = round(clamp(statistics.median(waits), 1.5, 8.0), 2)
+    for route_id, style in route_styles.items():
+        agency_id = style.get("agencyId", "")
+        if agency_id in AGENCY_WAIT_OVERRIDES:
+            route_waits[route_id] = AGENCY_WAIT_OVERRIDES[agency_id]
     return route_waits
+
+
+def route_wait_minutes(route_id: str, route_styles: dict, route_waits: Dict[str, float]) -> float:
+    agency_id = route_styles.get(route_id, {}).get("agencyId", "")
+    return route_waits.get(route_id, AGENCY_WAIT_OVERRIDES.get(agency_id, DEFAULT_BOARD_WAIT))
 
 
 def build_graph(
@@ -649,6 +659,7 @@ def build_graph(
     station_index_by_id: Dict[str, int],
     stop_to_complex: Dict[str, str],
     trips_by_id: dict,
+    route_styles: dict,
     route_waits: Dict[str, float],
 ) -> Tuple[list, list, list]:
     durations_by_edge: Dict[Tuple[int, int, str], List[float]] = defaultdict(list)
@@ -717,7 +728,7 @@ def build_graph(
                 if from_state == to_state:
                     continue
                 to_route = route_states[to_state]["routeId"]
-                transfer_cost = round(TRANSFER_PENALTY + route_waits.get(to_route, DEFAULT_BOARD_WAIT), 2)
+                transfer_cost = round(TRANSFER_PENALTY + route_wait_minutes(to_route, route_styles, route_waits), 2)
                 existing = adjacency[from_state].get(to_state)
                 if existing is None or transfer_cost < existing:
                     adjacency[from_state][to_state] = transfer_cost
@@ -735,11 +746,11 @@ def build_graph(
                     to_route = route_states[to_state]["routeId"]
                     from_route = route_states[from_state]["routeId"]
                     forward_cost = round(
-                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_waits.get(to_route, DEFAULT_BOARD_WAIT),
+                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_wait_minutes(to_route, route_styles, route_waits),
                         2,
                     )
                     backward_cost = round(
-                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_waits.get(from_route, DEFAULT_BOARD_WAIT),
+                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_wait_minutes(from_route, route_styles, route_waits),
                         2,
                     )
                     existing_forward = adjacency[from_state].get(to_state)
@@ -757,76 +768,6 @@ def build_graph(
             for edges in adjacency
         ],
     )
-
-
-def add_staten_island_ferry(
-    stations: list,
-    station_index_by_id: Dict[str, int],
-    route_styles: Dict[str, dict],
-    route_shapes: list,
-    route_waits: Dict[str, float],
-    route_states: list,
-    station_states: List[List[int]],
-    adjacency: list,
-) -> None:
-    st_george_id, whitehall_id = STATEN_ISLAND_FERRY_TERMINALS
-    st_george_index = station_index_by_id.get(st_george_id)
-    whitehall_index = station_index_by_id.get(whitehall_id)
-    if st_george_index is None or whitehall_index is None:
-        return
-
-    route_styles[STATEN_ISLAND_FERRY_ROUTE_ID] = {
-        "color": "#4FB3BF",
-        "textColor": "#FFFFFF",
-        "label": "Ferry",
-    }
-    route_waits[STATEN_ISLAND_FERRY_ROUTE_ID] = STATEN_ISLAND_FERRY_WAIT
-
-    stations[st_george_index]["routes"].add(STATEN_ISLAND_FERRY_ROUTE_ID)
-    stations[whitehall_index]["routes"].add(STATEN_ISLAND_FERRY_ROUTE_ID)
-
-    start = stations[st_george_index]["point"]
-    end = stations[whitehall_index]["point"]
-    route_shapes.append(
-        {
-            "routeId": STATEN_ISLAND_FERRY_ROUTE_ID,
-            "color": route_styles[STATEN_ISLAND_FERRY_ROUTE_ID]["color"],
-            "textColor": route_styles[STATEN_ISLAND_FERRY_ROUTE_ID]["textColor"],
-            "label": route_styles[STATEN_ISLAND_FERRY_ROUTE_ID]["label"],
-            "points": round_path([start, end]),
-        }
-    )
-
-    st_george_state = len(route_states)
-    route_states.append({"stationIndex": st_george_index, "routeId": STATEN_ISLAND_FERRY_ROUTE_ID})
-    adjacency.append([])
-    station_states[st_george_index].append(st_george_state)
-
-    whitehall_state = len(route_states)
-    route_states.append({"stationIndex": whitehall_index, "routeId": STATEN_ISLAND_FERRY_ROUTE_ID})
-    adjacency.append([])
-    station_states[whitehall_index].append(whitehall_state)
-
-    def upsert_edge(from_state: int, to_state: int, weight: float) -> None:
-        for edge in adjacency[from_state]:
-            if edge[0] == to_state:
-                edge[1] = min(edge[1], weight)
-                return
-        adjacency[from_state].append([to_state, weight])
-
-    travel = round(STATEN_ISLAND_FERRY_TRAVEL_MINUTES, 2)
-    upsert_edge(st_george_state, whitehall_state, travel)
-    upsert_edge(whitehall_state, st_george_state, travel)
-
-    for station_index, ferry_state in ((st_george_index, st_george_state), (whitehall_index, whitehall_state)):
-        for other_state in station_states[station_index]:
-            if other_state == ferry_state:
-                continue
-            other_route = route_states[other_state]["routeId"]
-            to_other = round(TRANSFER_PENALTY + route_waits.get(other_route, DEFAULT_BOARD_WAIT), 2)
-            to_ferry = round(TRANSFER_PENALTY + route_waits.get(STATEN_ISLAND_FERRY_ROUTE_ID, DEFAULT_BOARD_WAIT), 2)
-            upsert_edge(ferry_state, other_state, to_other)
-            upsert_edge(other_state, ferry_state, to_ferry)
 
 
 def build_grid_cells(polygons: MultiPolygon, stations: list, bbox: Tuple[float, float, float, float]) -> Tuple[list, list]:
@@ -880,7 +821,7 @@ def main() -> None:
     streets = extract_streets(lat0, bbox)
     stations, station_index_by_id, stop_to_complex = build_station_data(lat0)
     route_styles, route_shapes, trips_by_id = build_routes_and_shapes(lat0, bbox)
-    route_waits = build_route_waits(trips_by_id)
+    route_waits = build_route_waits(trips_by_id, route_styles)
     loaded_agencies = load_in_scope_agencies()
     trip_agencies = {trip["agency_id"] for trip in trips_by_id.values()}
     print(
@@ -893,17 +834,7 @@ def main() -> None:
     if missing_trip_agencies:
         print(f"Agencies without trips in this feed: {', '.join(missing_trip_agencies)}")
     route_states, station_states, adjacency = build_graph(
-        stations, station_index_by_id, stop_to_complex, trips_by_id, route_waits
-    )
-    add_staten_island_ferry(
-        stations,
-        station_index_by_id,
-        route_styles,
-        route_shapes,
-        route_waits,
-        route_states,
-        station_states,
-        adjacency,
+        stations, station_index_by_id, stop_to_complex, trips_by_id, route_styles, route_waits
     )
     cells, mask = build_grid_cells(all_polygons, stations, bbox)
 

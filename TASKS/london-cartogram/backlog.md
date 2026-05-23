@@ -176,7 +176,7 @@ Global verification rules:
 
 ## Phase 3 — Model adaptations
 
-### [ ] **BUILD-3: Per-agency wait calibration + delete Staten Island Ferry constants** | **Size: S** | **Deps: BUILD-1**
+### [x] **BUILD-3: Per-agency wait calibration + delete Staten Island Ferry constants** | **Size: S** | **Deps: BUILD-1**
 
 **Problem:** The model currently uses a flat `DEFAULT_BOARD_WAIT = 4.0` plus a hardcoded override for the Staten Island Ferry route. For London, infrequent modes (Thames Clippers, Woolwich Ferry, Cable Car) need higher wait penalties so the algorithm doesn't over-recommend them. The NYC ferry constants are now dead code that the rename strategy (Q11) says to delete outright.
 
