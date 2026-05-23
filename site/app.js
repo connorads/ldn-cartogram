@@ -34,6 +34,8 @@ const CENTRAL_REACHABILITY_ZONE = 1;
 const CENTRAL_REACHABILITY_AGENCIES = new Set(["LUL", "DLR"]);
 const OUTSIDE_GLA_ALPHA = 0.4;
 const SHARE_COORDINATE_DECIMALS = 5;
+const FULL_UK_POSTCODE_PATTERN = /^[A-Z]{1,2}[0-9][A-Z0-9]?\s*[0-9][A-Z]{2}$/i;
+const UK_OUTCODE_PATTERN = /^[A-Z]{1,2}[0-9][A-Z0-9]?$/i;
 const EMOJI_BURST_INTERVAL_MS = 90;
 const EMOJI_BURST_PER_TICK = 3;
 const EMOJI_BURST_LIFETIME_MS = 900;
@@ -2782,7 +2784,63 @@ function lonLatToWorld(lon, lat) {
   return [lon * metersPerDegLon, lat * metersPerDegLat];
 }
 
-async function searchAddress(query) {
+function normalizePostcodeQuery(query) {
+  return query.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function postcodeResult(title, subtitle, result) {
+  return {
+    title,
+    subtitle,
+    lat: Number(result.latitude),
+    lon: Number(result.longitude),
+  };
+}
+
+async function fetchPostcodesIo(path) {
+  const response = await fetch(`https://api.postcodes.io${path}`, {
+    headers: {
+      Accept: "application/json",
+    },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Postcodes.io lookup failed with status ${response.status}`);
+  }
+  const payload = await response.json();
+  return payload.result ?? null;
+}
+
+async function searchPostcode(query) {
+  const normalized = normalizePostcodeQuery(query);
+  if (FULL_UK_POSTCODE_PATTERN.test(query)) {
+    const result = await fetchPostcodesIo(`/postcodes/${encodeURIComponent(normalized)}`);
+    if (!result) return null;
+    return [
+      postcodeResult(
+        result.postcode ?? query.toUpperCase(),
+        "UK postcode via postcodes.io",
+        result,
+      ),
+    ];
+  }
+
+  if (UK_OUTCODE_PATTERN.test(normalized)) {
+    const result = await fetchPostcodesIo(`/outcodes/${encodeURIComponent(normalized)}`);
+    if (!result) return null;
+    return [
+      postcodeResult(
+        result.outcode ?? normalized,
+        "UK postcode district via postcodes.io",
+        result,
+      ),
+    ];
+  }
+
+  return null;
+}
+
+async function searchNominatim(query) {
   const params = new URLSearchParams({
     q: `${query}, London`,
     format: "jsonv2",
@@ -2790,7 +2848,7 @@ async function searchAddress(query) {
     countrycodes: "gb",
     limit: "5",
     bounded: "1",
-    viewbox: "-0.5103,51.6923,0.3340,51.2868",
+    viewbox: "-0.51,51.69,0.33,51.28",
   });
   const response = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
     headers: {
@@ -2807,6 +2865,12 @@ async function searchAddress(query) {
     lat: Number(item.lat),
     lon: Number(item.lon),
   }));
+}
+
+async function searchAddress(query) {
+  const postcodeResults = await searchPostcode(query);
+  if (postcodeResults) return postcodeResults;
+  return searchNominatim(query);
 }
 
 function setLocateButtonsBusy(isBusy) {

@@ -373,7 +373,7 @@ Global verification rules:
 
 ---
 
-### [ ] **UI-3: Postcode-first search** | **Size: M** | **Deps: CC-1**
+### [x] **UI-3: Postcode-first search** | **Size: M** | **Deps: CC-1**
 
 **Problem:** NYC's free-text Nominatim search misroutes London queries to non-London matches. Add UK postcode handling (via `postcodes.io`, no API key) as the first path, and bias Nominatim to Greater London for everything else (Q13).
 
