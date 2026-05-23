@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import heapq
 import json
 import math
 import re
@@ -48,6 +49,9 @@ AGENCY_WAIT_OVERRIDES = {
     "WFF": 12.0,
     "CAB": 8.0,
 }
+REACHABILITY_AGENCIES = {"LUL", "DLR"}
+REACHABILITY_ZONE = 1
+REACHABILITY_THRESHOLD_MINUTES = 30.0
 
 Point = Tuple[float, float]
 Ring = List[Point]
@@ -1049,6 +1053,111 @@ def enrich_station_zones(stations: list, route_styles: dict) -> None:
     print(f"Unmatched LUL/DLR zone stations ({len(unmatched_lul_dlr)}): {', '.join(sorted(unmatched_lul_dlr)) or 'none'}")
 
 
+def station_agency_ids(station: dict, route_styles: dict) -> set[str]:
+    return {
+        route_styles.get(route_id, {}).get("agencyId", "")
+        for route_id in station["routes"]
+    }
+
+
+def central_reachability_station_indexes(stations: list, route_styles: dict) -> list[int]:
+    return [
+        station_index
+        for station_index, station in enumerate(stations)
+        if REACHABILITY_ZONE in (station.get("zones") or [])
+        and station_agency_ids(station, route_styles) & REACHABILITY_AGENCIES
+    ]
+
+
+def nearest_station_accesses(point: Point, stations: list, count: int) -> list[tuple[int, float]]:
+    ranked = sorted(
+        (
+            (
+                station_index,
+                math.hypot(station["point"][0] - point[0], station["point"][1] - point[1]) / ACCESS_WALK_METERS_PER_MINUTE
+                + STATION_ACCESS_PENALTY,
+            )
+            for station_index, station in enumerate(stations)
+        ),
+        key=lambda item: item[1],
+    )
+    return ranked[:count]
+
+
+def dijkstra_from_accesses(
+    accesses: Sequence[Sequence[float]],
+    route_states: list,
+    station_states: list,
+    adjacency: list,
+    route_styles: dict,
+    route_waits: Dict[str, float],
+) -> list[float]:
+    distances = [math.inf] * len(route_states)
+    heap: list[tuple[float, int]] = []
+    for station_index, walk_minutes in accesses:
+        for route_state_index in station_states[int(station_index)]:
+            route_id = route_states[route_state_index]["routeId"]
+            candidate = float(walk_minutes) + route_wait_minutes(route_id, route_styles, route_waits)
+            if candidate < distances[route_state_index]:
+                distances[route_state_index] = candidate
+                heapq.heappush(heap, (candidate, route_state_index))
+
+    while heap:
+        current_distance, current_index = heapq.heappop(heap)
+        if current_distance != distances[current_index]:
+            continue
+        for edge in adjacency[current_index]:
+            next_index = int(edge[0])
+            candidate = current_distance + float(edge[1])
+            if candidate < distances[next_index]:
+                distances[next_index] = candidate
+                heapq.heappush(heap, (candidate, next_index))
+    return distances
+
+
+def add_zone1_reachability_scores(
+    cells: list,
+    stations: list,
+    route_styles: dict,
+    route_waits: Dict[str, float],
+    route_states: list,
+    station_states: list,
+    adjacency: list,
+) -> int:
+    target_station_indexes = central_reachability_station_indexes(stations, route_styles)
+    target_accesses = {
+        station_index: nearest_station_accesses(stations[station_index]["point"], stations, CELL_NEAREST_STATIONS)
+        for station_index in target_station_indexes
+    }
+    denominator = len(target_station_indexes)
+    for cell in cells:
+        distances = dijkstra_from_accesses(
+            cell["access"],
+            route_states,
+            station_states,
+            adjacency,
+            route_styles,
+            route_waits,
+        )
+        reachable = 0
+        for station_index in target_station_indexes:
+            station_point = stations[station_index]["point"]
+            direct_walk_minutes = math.hypot(station_point[0] - cell["point"][0], station_point[1] - cell["point"][1]) / WALK_METERS_PER_MINUTE
+            best_minutes = direct_walk_minutes
+            for access_station_index, egress_minutes in target_accesses[station_index]:
+                for route_state_index in station_states[access_station_index]:
+                    best_minutes = min(best_minutes, distances[route_state_index] + egress_minutes)
+            if best_minutes <= REACHABILITY_THRESHOLD_MINUTES:
+                reachable += 1
+        cell["zone1ReachableStations"] = reachable
+        cell["zone1ReachabilityScore"] = round(reachable / denominator, 4) if denominator else 0.0
+    print(
+        "Zone 1 reachability denominator: "
+        f"{denominator} LUL/DLR stations within {REACHABILITY_THRESHOLD_MINUTES:g} min threshold"
+    )
+    return denominator
+
+
 def build_grid_cells(polygons: MultiPolygon, stations: list, bbox: Tuple[float, float, float, float]) -> Tuple[list, list]:
     min_x, min_y, max_x, max_y = bbox
     cell_w = (max_x - min_x) / GRID_COLS
@@ -1132,6 +1241,15 @@ def main() -> None:
     )
     enrich_station_zones(stations, route_styles)
     cells, mask = build_grid_cells(all_polygons, stations, bbox)
+    central_reachability_station_count = add_zone1_reachability_scores(
+        cells,
+        stations,
+        route_styles,
+        route_waits,
+        route_states,
+        station_states,
+        adjacency,
+    )
 
     output = {
         "meta": {
@@ -1146,6 +1264,8 @@ def main() -> None:
             "cellNearestStations": CELL_NEAREST_STATIONS,
             "defaultBoardWait": DEFAULT_BOARD_WAIT,
             "transferPenalty": TRANSFER_PENALTY,
+            "centralReachabilityStationCount": central_reachability_station_count,
+            "centralReachabilityThresholdMinutes": int(REACHABILITY_THRESHOLD_MINUTES),
         },
         "boroughs": boroughs,
         "geography": {

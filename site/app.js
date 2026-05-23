@@ -29,7 +29,9 @@ const IMAGE_WARP_OVERDRAW_PX = 0.35;
 const WARP_LINE_CURVE_TOLERANCE_PX = 1.1;
 const WARP_LINE_MAX_SUBDIVISION_DEPTH = 7;
 const DEFAULT_SWIM_METERS_PER_MINUTE = 28;
-const REACHABILITY_THRESHOLD_MINUTES = 60;
+const CENTRAL_REACHABILITY_THRESHOLD_MINUTES = 30;
+const CENTRAL_REACHABILITY_ZONE = 1;
+const CENTRAL_REACHABILITY_AGENCIES = new Set(["LUL", "DLR"]);
 const SHARE_COORDINATE_DECIMALS = 5;
 const EMOJI_BURST_INTERVAL_MS = 90;
 const EMOJI_BURST_PER_TICK = 3;
@@ -1420,13 +1422,22 @@ function estimateTravel(origin, originDistances, destinationPoint) {
   };
 }
 
+function isCentralReachabilityStation(station) {
+  if (!station.zones?.includes(CENTRAL_REACHABILITY_ZONE)) return false;
+  return station.routes.some((routeId) => {
+    const agencyId = state.data.routeStyles?.[routeId]?.agencyId;
+    return CENTRAL_REACHABILITY_AGENCIES.has(agencyId);
+  });
+}
+
 function summarizeReachability(origin, originDistances) {
-  const totalStations = state.data.stations.length;
+  const centralStations = state.data.stations.filter(isCentralReachabilityStation);
+  const totalStations = state.data.meta.centralReachabilityStationCount ?? centralStations.length;
   let reachableStations = 0;
 
-  for (const station of state.data.stations) {
+  for (const station of centralStations) {
     const trip = estimateTravel(origin, originDistances, station.point);
-    if (trip.minutes <= REACHABILITY_THRESHOLD_MINUTES) {
+    if (trip.minutes <= CENTRAL_REACHABILITY_THRESHOLD_MINUTES) {
       reachableStations += 1;
     }
   }
@@ -1442,10 +1453,10 @@ function syncReachabilityScore(summary = null) {
   if (!summary) {
     reachScoreCard.hidden = true;
     reachScoreValue.textContent = "-- / --";
-    reachScoreMeta.textContent = "Choose an origin to see how much of central London you can reach.";
+    reachScoreMeta.textContent = "Choose an origin to see how much of central London you can reach in 30 min.";
     if (mobileReachValue && mobileReachMeta) {
       mobileReachValue.textContent = "-- / --";
-      mobileReachMeta.textContent = "Choose an origin to see how much of central London you can reach.";
+      mobileReachMeta.textContent = "Choose an origin to see how much of central London you can reach in 30 min.";
     }
     return;
   }
@@ -1453,10 +1464,10 @@ function syncReachabilityScore(summary = null) {
   reachScoreCard.hidden = false;
   const percent = Math.round(summary.ratio * 100);
   reachScoreValue.textContent = `${summary.reachableStations} / ${summary.totalStations}`;
-  reachScoreMeta.textContent = `${percent}% of stations are reachable within ${REACHABILITY_THRESHOLD_MINUTES} minutes.`;
+  reachScoreMeta.textContent = `${percent}% of central London reachable in 30 min.`;
   if (mobileReachValue && mobileReachMeta) {
     mobileReachValue.textContent = `${summary.reachableStations} / ${summary.totalStations}`;
-    mobileReachMeta.textContent = `${percent}% of stations are reachable within ${REACHABILITY_THRESHOLD_MINUTES} minutes.`;
+    mobileReachMeta.textContent = `${percent}% of central London reachable in 30 min.`;
   }
 }
 
@@ -2219,7 +2230,7 @@ function exportShareImage() {
 
     exportCtx.fillStyle = "#5f6f7f";
     exportCtx.font = '700 17px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
-    exportCtx.fillText("60-MINUTE REACH", badgeX + 20, badgeY + 26);
+    exportCtx.fillText("ZONE 1 IN 30 MIN", badgeX + 20, badgeY + 26);
 
     exportCtx.fillStyle = "#17304d";
     exportCtx.font = '700 42px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
@@ -2231,7 +2242,7 @@ function exportShareImage() {
 
     exportCtx.fillStyle = "#5f6f7f";
     exportCtx.font = '500 18px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
-    exportCtx.fillText(`${percent}% of stations within 60 min`, badgeX + 20, badgeY + 94);
+    exportCtx.fillText(`${percent}% of central London within 30 min`, badgeX + 20, badgeY + 94);
   }
   exportCtx.restore();
 

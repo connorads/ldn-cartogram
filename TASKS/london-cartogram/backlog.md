@@ -275,7 +275,7 @@ Global verification rules:
 
 ---
 
-### [ ] **SCO-2: Replace 60-min reachability with "Zone 1 in 30 min"** | **Size: M** | **Deps: SCO-1**
+### [x] **SCO-2: Replace 60-min reachability with "Zone 1 in 30 min"** | **Size: M** | **Deps: SCO-1**
 
 **Problem:** The NYC site shows "% of subway stations reachable in 60 min". For London the headline is "% of Zone 1 LUL/DLR stations reachable in 30 min" (Q12). Both the build-side score computation and the front-end display copy must change.
 
