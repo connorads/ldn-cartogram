@@ -37,3 +37,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** e02436d
 - **Verification:** `python3 build_commute_site_data.py` completed and printed `OSI edges loaded: 304`, `OSI unmatched station names (0): none`, `Tram unmatched station names (0): none`; generated graph has `136` fixed interchange edges; Bank ↔ Monument is `1.5` min each way and Hammersmith H&C → Hammersmith Dist/Picc is `2.0` min; Playwright loaded `http://localhost:8000/site/` with zero console errors.
 - **Surprises:** TfL OSI times are tenths of minutes; many OSI rows target out-of-scope National Rail, Overground, Elizabeth line, or other stations and are reported separately from unmatched in-scope names.
+
+## 2026-05-23T00:28:06Z | SCO-1 | done
+
+- **Commit:** a725305
+- **Verification:** `python3 build_commute_site_data.py` completed and printed `Zone-tagged stations: 319/359` and `Unmatched LUL/DLR zone stations (0): none`; output check printed `with zones: 319 / 359`; spot checks: Oxford Circus `[1]`, Bank `[1]`, Abbey Road DLR `[2, 3]`, Cutty Sark DLR `[2, 3]`.
+- **Surprises:** TfL station zone values use both `+` and `/` as multi-zone separators, so parsing now handles both.
