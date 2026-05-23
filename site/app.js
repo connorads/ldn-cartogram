@@ -1209,6 +1209,8 @@ function drawStations(drawCtx, projectPoint) {
 }
 
 function drawBoroughLabels(drawCtx, projectPoint) {
+  // Neighbourhood labels are supplied by a later London-specific task.
+  if (!state.data.boroughs.some((borough) => borough.label)) return;
   drawCtx.font = '700 15px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
   drawCtx.textAlign = "center";
   drawCtx.textBaseline = "middle";
@@ -1217,6 +1219,7 @@ function drawBoroughLabels(drawCtx, projectPoint) {
   drawCtx.lineWidth = 6;
   drawCtx.lineJoin = "round";
   for (const borough of state.data.boroughs) {
+    if (!borough.label) continue;
     const [lx, ly] = projectPoint(borough.label);
     drawCtx.strokeText(borough.name, lx, ly);
     drawCtx.fillText(borough.name, lx, ly);

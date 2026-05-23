@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 SITE_DATA_PATH = ROOT / "site" / "data" / "commute_map_data.json"
 
-BOROUGHS_PATH = DATA_DIR / "borough_boundaries.geojson"
+BOROUGHS_PATH = DATA_DIR / "uk_lad_boundaries.geojson"
 PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
 STREETS_PATH = DATA_DIR / "osm_major_streets.json"
 GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
@@ -70,19 +70,111 @@ def lonlat_to_xy(lon: float, lat: float, lat0: float) -> Point:
     return lon * meters_per_deg_lon, lat * meters_per_deg_lat
 
 
+def osgb36_to_wgs84(easting: float, northing: float) -> Tuple[float, float]:
+    airy_a = 6_377_563.396
+    airy_b = 6_356_256.909
+    national_grid_f0 = 0.9996012717
+    lat0 = math.radians(49.0)
+    lon0 = math.radians(-2.0)
+    northing0 = -100_000.0
+    easting0 = 400_000.0
+    e2 = 1.0 - (airy_b * airy_b) / (airy_a * airy_a)
+    n = (airy_a - airy_b) / (airy_a + airy_b)
+
+    lat = lat0
+    meridional_arc = 0.0
+    while northing - northing0 - meridional_arc >= 0.00001:
+        lat = (northing - northing0 - meridional_arc) / (airy_a * national_grid_f0) + lat
+        meridional_arc = airy_b * national_grid_f0 * (
+            (1 + n + 5 / 4 * n**2 + 5 / 4 * n**3) * (lat - lat0)
+            - (3 * n + 3 * n**2 + 21 / 8 * n**3) * math.sin(lat - lat0) * math.cos(lat + lat0)
+            + (15 / 8 * n**2 + 15 / 8 * n**3) * math.sin(2 * (lat - lat0)) * math.cos(2 * (lat + lat0))
+            - 35 / 24 * n**3 * math.sin(3 * (lat - lat0)) * math.cos(3 * (lat + lat0))
+        )
+
+    sin_lat = math.sin(lat)
+    cos_lat = math.cos(lat)
+    nu = airy_a * national_grid_f0 / math.sqrt(1 - e2 * sin_lat**2)
+    rho = airy_a * national_grid_f0 * (1 - e2) / (1 - e2 * sin_lat**2) ** 1.5
+    eta2 = nu / rho - 1
+    tan_lat = math.tan(lat)
+    tan2 = tan_lat * tan_lat
+    tan4 = tan2 * tan2
+    sec_lat = 1 / cos_lat
+    d_easting = easting - easting0
+
+    vii = tan_lat / (2 * rho * nu)
+    viii = tan_lat / (24 * rho * nu**3) * (5 + 3 * tan2 + eta2 - 9 * tan2 * eta2)
+    ix = tan_lat / (720 * rho * nu**5) * (61 + 90 * tan2 + 45 * tan4)
+    x = sec_lat / nu
+    xi = sec_lat / (6 * nu**3) * (nu / rho + 2 * tan2)
+    xii = sec_lat / (120 * nu**5) * (5 + 28 * tan2 + 24 * tan4)
+    xiia = sec_lat / (5040 * nu**7) * (61 + 662 * tan2 + 1320 * tan4 + 720 * tan4 * tan2)
+
+    osgb_lat = lat - vii * d_easting**2 + viii * d_easting**4 - ix * d_easting**6
+    osgb_lon = lon0 + x * d_easting - xi * d_easting**3 + xii * d_easting**5 - xiia * d_easting**7
+
+    x1, y1, z1 = ellipsoid_to_cartesian(osgb_lat, osgb_lon, 0.0, airy_a, airy_b)
+    x2, y2, z2 = helmert_osgb36_to_wgs84(x1, y1, z1)
+    wgs_lat, wgs_lon = cartesian_to_ellipsoid(x2, y2, z2, 6_378_137.0, 6_356_752.3141)
+    return math.degrees(wgs_lon), math.degrees(wgs_lat)
+
+
+def ellipsoid_to_cartesian(lat: float, lon: float, height: float, a: float, b: float) -> Tuple[float, float, float]:
+    e2 = 1.0 - (b * b) / (a * a)
+    nu = a / math.sqrt(1 - e2 * math.sin(lat) ** 2)
+    x = (nu + height) * math.cos(lat) * math.cos(lon)
+    y = (nu + height) * math.cos(lat) * math.sin(lon)
+    z = ((1 - e2) * nu + height) * math.sin(lat)
+    return x, y, z
+
+
+def helmert_osgb36_to_wgs84(x: float, y: float, z: float) -> Tuple[float, float, float]:
+    tx, ty, tz = 446.448, -125.157, 542.060
+    rx = math.radians(0.1502 / 3600)
+    ry = math.radians(0.2470 / 3600)
+    rz = math.radians(0.8421 / 3600)
+    scale = -20.4894 * 1e-6
+    return (
+        tx + (1 + scale) * x - rz * y + ry * z,
+        ty + rz * x + (1 + scale) * y - rx * z,
+        tz - ry * x + rx * y + (1 + scale) * z,
+    )
+
+
+def cartesian_to_ellipsoid(x: float, y: float, z: float, a: float, b: float) -> Tuple[float, float]:
+    e2 = 1.0 - (b * b) / (a * a)
+    lon = math.atan2(y, x)
+    p = math.hypot(x, y)
+    lat = math.atan2(z, p * (1 - e2))
+    while True:
+        nu = a / math.sqrt(1 - e2 * math.sin(lat) ** 2)
+        next_lat = math.atan2(z + e2 * nu * math.sin(lat), p)
+        if abs(next_lat - lat) < 1e-12:
+            return next_lat, lon
+        lat = next_lat
+
+
+def boundary_point_to_xy(x: float, y: float, lat0: float) -> Point:
+    lon, lat = osgb36_to_wgs84(x, y)
+    return lonlat_to_xy(lon, lat, lat0)
+
+
+def geometry_polygons(geometry: dict) -> list:
+    if geometry["type"] == "Polygon":
+        return [geometry["coordinates"]]
+    if geometry["type"] == "MultiPolygon":
+        return geometry["coordinates"]
+    return []
+
+
 def average_borough_latitude(payload: dict) -> float:
-    total = 0.0
-    count = 0
-    for feature in payload["features"]:
-        geometry = feature["geometry"]
-        if geometry["type"] != "MultiPolygon":
-            continue
-        for polygon in geometry["coordinates"]:
-            for ring in polygon:
-                for _, lat in ring:
-                    total += lat
-                    count += 1
-    return total / max(count, 1)
+    latitudes = [
+        float(feature["properties"]["LAT"])
+        for feature in payload["features"]
+        if str(feature.get("properties", {}).get("LAD24CD", "")).startswith("E09")
+    ]
+    return sum(latitudes) / max(len(latitudes), 1)
 
 
 def ring_area(ring: Sequence[Point]) -> float:
@@ -187,30 +279,89 @@ def point_in_multipolygon(point: Point, multipolygon: MultiPolygon) -> bool:
     return any(point_in_polygon(point, polygon) for polygon in multipolygon)
 
 
+def edge_key(start: Sequence[float], end: Sequence[float]) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    a = (round(start[0], 7), round(start[1], 7))
+    b = (round(end[0], 7), round(end[1], 7))
+    return (a, b) if a <= b else (b, a)
+
+
+def union_outline_from_features(features: Sequence[dict], lat0: float) -> MultiPolygon:
+    directed_edges: Dict[Tuple[Tuple[float, float], Tuple[float, float]], Tuple[Tuple[float, float], Tuple[float, float]]] = {}
+    edge_counts: Counter[Tuple[Tuple[float, float], Tuple[float, float]]] = Counter()
+
+    for feature in features:
+        geometry = feature["geometry"]
+        for polygon_coords in geometry_polygons(geometry):
+            if not polygon_coords:
+                continue
+            ring_coords = polygon_coords[0]
+            for start, end in zip(ring_coords, ring_coords[1:]):
+                key = edge_key(start, end)
+                edge_counts[key] += 1
+                directed_edges.setdefault(
+                    key,
+                    ((round(start[0], 7), round(start[1], 7)), (round(end[0], 7), round(end[1], 7))),
+                )
+
+    adjacency: Dict[Tuple[float, float], List[Tuple[float, float]]] = defaultdict(list)
+    for key, count in edge_counts.items():
+        if count != 1:
+            continue
+        start, end = directed_edges[key]
+        adjacency[start].append(end)
+
+    rings_lonlat: List[List[Tuple[float, float]]] = []
+    while adjacency:
+        start = next(iter(adjacency))
+        ring = [start]
+        current = start
+        while True:
+            next_points = adjacency.get(current)
+            if not next_points:
+                break
+            next_point = next_points.pop()
+            if not next_points:
+                del adjacency[current]
+            ring.append(next_point)
+            current = next_point
+            if current == start:
+                break
+        if len(ring) >= 4 and ring[0] == ring[-1]:
+            rings_lonlat.append(ring)
+
+    polygons = []
+    for ring_coords in rings_lonlat:
+        ring = [boundary_point_to_xy(x, y, lat0) for x, y in ring_coords]
+        polygons.append([simplify_ring(ring, 120.0)])
+    return polygons
+
+
 def extract_boroughs(payload: dict, lat0: float) -> Tuple[list, MultiPolygon]:
     boroughs = []
-    all_polygons: MultiPolygon = []
-    for feature in payload["features"]:
+    london_features = [
+        feature
+        for feature in payload["features"]
+        if str(feature.get("properties", {}).get("LAD24CD", "")).startswith("E09")
+    ]
+    if len(london_features) != 33:
+        raise ValueError(f"Expected 33 London LAD features, found {len(london_features)}")
+
+    for feature in london_features:
         geometry = feature["geometry"]
-        if geometry["type"] != "MultiPolygon":
-            continue
         multipolygon: MultiPolygon = []
-        for polygon_coords in geometry["coordinates"]:
+        for polygon_coords in geometry_polygons(geometry):
             polygon: Polygon = []
             for ring_coords in polygon_coords:
-                ring = [lonlat_to_xy(lon, lat, lat0) for lon, lat in ring_coords]
+                ring = [boundary_point_to_xy(x, y, lat0) for x, y in ring_coords]
                 polygon.append(simplify_ring(ring, 120.0))
             multipolygon.append(polygon)
-            all_polygons.append(polygon)
-        largest_polygon = max(multipolygon, key=lambda polygon: abs(ring_area(polygon[0])))
         boroughs.append(
             {
-                "name": feature["properties"]["boroname"],
-                "label": round_point(polygon_centroid(largest_polygon[0])),
+                "name": feature["properties"]["LAD24NM"],
                 "polygons": [[round_path(ring) for ring in polygon] for polygon in multipolygon],
             }
         )
-    return boroughs, all_polygons
+    return boroughs, union_outline_from_features(london_features, lat0)
 
 
 def extract_parks(lat0: float, bbox: Tuple[float, float, float, float]) -> list:
@@ -772,6 +923,11 @@ def main() -> None:
             "interComplexTransferPenalty": INTER_COMPLEX_TRANSFER_PENALTY,
         },
         "boroughs": boroughs,
+        "geography": {
+            "outline": [[round_path(ring) for ring in polygon] for polygon in all_polygons],
+            "boroughs": boroughs,
+        },
+        "landMask": [[round_path(ring) for ring in polygon] for polygon in all_polygons],
         "externalLand": external_land,
         "parks": parks,
         "streets": streets,

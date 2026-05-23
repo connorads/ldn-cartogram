@@ -115,7 +115,8 @@
     <meta name="twitter:image:alt" content="Preview of the London Commute POV transit cartogram." />
     <script>
       (function () {
-        const assetBase = "/";
+        const path = window.location.pathname;
+        const assetBase = window.location.hostname === "localhost" && path.startsWith("/site/") ? "/site/" : "/";
         window.__ASSET_BASE__ = assetBase;
 
         const favicon = document.createElement("link");

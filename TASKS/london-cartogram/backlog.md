@@ -149,7 +149,7 @@ Global verification rules:
 
 ---
 
-### [ ] **BUILD-2: Swap NYC boroughs → ONS 33 GLA boroughs (unioned outline + graticule)** | **Size: M** | **Deps: CC-2**
+### [x] **BUILD-2: Swap NYC boroughs → ONS 33 GLA boroughs (unioned outline + graticule)** | **Size: M** | **Deps: CC-2**
 
 **Problem:** The build and SVG scripts load `data/borough_boundaries.geojson` expecting 5 NYC borough MultiPolygons. The London equivalent is 33 LAD polygons in `data/uk_lad_boundaries.geojson`, filtered to `LAD24CD` codes starting `E09`. The cartogram warp must operate on the unioned outline; individual polygons stay available for graticule rendering.
 
