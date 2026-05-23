@@ -31,3 +31,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** b96e46e
 - **Verification:** `git grep -nE "STATEN_ISLAND_FERRY|SIF" -- *.py` returned no matches; `python3 build_commute_site_data.py` completed; generated route waits include `CAB-London-Cable-Car: 8.0`, all `CV-*`: `18.0`, and `WFF-Woolwich-Ferry: 12.0`; Oxford Circus to `IFS Cloud Royal Docks` is `51.95` min versus `24.5` min to North Greenwich and `27.5` min to Canning Town.
 - **Surprises:** none.
+
+## 2026-05-23T00:21:34Z | BUILD-4 | done
+
+- **Commit:** e02436d
+- **Verification:** `python3 build_commute_site_data.py` completed and printed `OSI edges loaded: 304`, `OSI unmatched station names (0): none`, `Tram unmatched station names (0): none`; generated graph has `136` fixed interchange edges; Bank ↔ Monument is `1.5` min each way and Hammersmith H&C → Hammersmith Dist/Picc is `2.0` min; Playwright loaded `http://localhost:8000/site/` with zero console errors.
+- **Surprises:** TfL OSI times are tenths of minutes; many OSI rows target out-of-scope National Rail, Overground, Elizabeth line, or other stations and are reported separately from unmatched in-scope names.
