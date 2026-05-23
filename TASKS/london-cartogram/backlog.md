@@ -211,7 +211,7 @@ Global verification rules:
 
 ---
 
-### [ ] **BUILD-4: TfL OSI interchange edges + tram hand-list** | **Size: M** | **Deps: BUILD-1, CC-2**
+### [x] **BUILD-4: TfL OSI interchange edges + tram hand-list** | **Size: M** | **Deps: BUILD-1, CC-2**
 
 **Problem:** The NYC pipeline models out-of-station interchanges using a `260m walking radius + 7min penalty` heuristic on GTFS "complexes". TfL publishes an authoritative OSI ODS with 152 named interchange pairs and asymmetric walk times. Use the official data; keep the heuristic only as fallback. Also supplement with a small hand-list of tram-rail interchanges (East Croydon, Wimbledon, Elmers End, Beckenham Junction) since the OSI list omits trams.
 

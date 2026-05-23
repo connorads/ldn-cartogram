@@ -1,1 +1,10 @@
-{"edges":[]}
+{"edges":[
+  {"from":"East Croydon Tram Stop","to":"East Croydon","minutes":1.5},
+  {"from":"East Croydon","to":"East Croydon Tram Stop","minutes":1.5},
+  {"from":"Wimbledon Tram Stop","to":"Wimbledon Underground Station","minutes":2.0},
+  {"from":"Wimbledon Underground Station","to":"Wimbledon Tram Stop","minutes":2.0},
+  {"from":"Elmers End Tram Stop","to":"Elmers End","minutes":1.5},
+  {"from":"Elmers End","to":"Elmers End Tram Stop","minutes":1.5},
+  {"from":"Beckenham Junction Tram Stop","to":"Beckenham Junction","minutes":1.5},
+  {"from":"Beckenham Junction","to":"Beckenham Junction Tram Stop","minutes":1.5}
+]}

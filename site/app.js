@@ -1291,8 +1291,11 @@ function buildDynamicAdjacency() {
 
   return state.data.adjacency.map((edges, fromIndex) => {
     const fromState = routeStates[fromIndex];
-    return edges.map(([toIndex, weight]) => {
+    return edges.map(([toIndex, weight, edgeKind]) => {
       const toState = routeStates[toIndex];
+      if (edgeKind === "fixedInterchange") {
+        return { toIndex, kind: "fixedInterchange", fixedMinutes: weight };
+      }
       const boardingDelta =
         (state.data.routeWaits?.[toState.routeId] ?? defaults.transitTime) - defaults.transitTime;
       if (fromState.routeId === toState.routeId) {
@@ -1377,6 +1380,8 @@ function runDijkstra(origin) {
           ? edge.rideMinutes
           : edge.kind === "transfer"
             ? settings.transferTime + settings.transitTime + edge.boardingDelta
+            : edge.kind === "fixedInterchange"
+              ? edge.fixedMinutes
             : edge.walkDistance / settings.walkingSpeed +
               edge.walkPenalty +
               settings.transferTime +

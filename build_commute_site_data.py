@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 import statistics
 import zipfile
 from collections import Counter, defaultdict
@@ -19,6 +20,8 @@ DATA_DIR = ROOT / "data"
 SITE_DATA_PATH = ROOT / "site" / "data" / "commute_map_data.json"
 
 BOROUGHS_PATH = DATA_DIR / "uk_lad_boundaries.geojson"
+TFL_OSI_PATH = DATA_DIR / "tfl_osi.ods"
+TRAM_INTERCHANGES_PATH = DATA_DIR / "tram_interchanges.json"
 PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
 STREETS_PATH = DATA_DIR / "osm_major_streets.json"
 GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
@@ -39,7 +42,6 @@ INTER_COMPLEX_WALK_RADIUS = 260.0
 INTER_COMPLEX_WALK_PENALTY = 2.0
 DEFAULT_BOARD_WAIT = 4.0
 TRANSFER_PENALTY = 4.0
-INTER_COMPLEX_TRANSFER_PENALTY = 7.0
 IN_SCOPE_AGENCIES = {"LUL", "DLR", "TCL", "CV", "WFF", "CAB"}
 AGENCY_WAIT_OVERRIDES = {
     "CV": 18.0,
@@ -501,6 +503,63 @@ def read_csv_from_zip(gtfs_path: Path, member: str) -> Iterable[dict]:
             yield from reader
 
 
+def ods_cell_text(cell: ET.Element, namespace: dict) -> str:
+    return " ".join("".join(paragraph.itertext()) for paragraph in cell.findall("text:p", namespace)).strip()
+
+
+def ods_rows(path: Path) -> Iterable[list[str]]:
+    namespace = {
+        "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+        "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+    }
+    table_cell = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}table-cell"
+    columns_repeated = "{urn:oasis:names:tc:opendocument:xmlns:table:1.0}number-columns-repeated"
+    with zipfile.ZipFile(path) as archive:
+        root = ET.fromstring(archive.read("content.xml"))
+    for row in root.findall(".//table:table-row", namespace):
+        values: list[str] = []
+        for cell in row.findall(table_cell):
+            repeat = int(cell.attrib.get(columns_repeated, "1"))
+            values.extend([ods_cell_text(cell, namespace)] * min(repeat, 32))
+        if any(values):
+            yield values
+
+
+def parse_minutes_tenths(value: str) -> float | None:
+    try:
+        return float(value) / 10.0
+    except (TypeError, ValueError):
+        return None
+
+
+def load_osi_edges() -> list[tuple[str, str, float]]:
+    rows = list(ods_rows(TFL_OSI_PATH))
+    header_index = next(index for index, row in enumerate(rows) if "Station_A_Name" in row)
+    header = rows[header_index]
+    column_index = {name: header.index(name) for name in ("Station_A_Name", "Station_B_Name", "InterchangeTimeAB", "InterchangeTimeBA")}
+    edges: list[tuple[str, str, float]] = []
+    for row in rows[header_index + 1:]:
+        if len(row) <= max(column_index.values()):
+            continue
+        station_a = row[column_index["Station_A_Name"]]
+        station_b = row[column_index["Station_B_Name"]]
+        minutes_ab = parse_minutes_tenths(row[column_index["InterchangeTimeAB"]])
+        minutes_ba = parse_minutes_tenths(row[column_index["InterchangeTimeBA"]])
+        if station_a and station_b and minutes_ab is not None:
+            edges.append((station_a, station_b, minutes_ab))
+        if station_a and station_b and minutes_ba is not None:
+            edges.append((station_b, station_a, minutes_ba))
+    return edges
+
+
+def load_tram_interchange_edges() -> list[tuple[str, str, float]]:
+    payload = load_json(TRAM_INTERCHANGES_PATH)
+    return [
+        (edge["from"], edge["to"], float(edge["minutes"]))
+        for edge in payload.get("edges", [])
+    ]
+
+
 def parse_gtfs_time(value: str) -> int:
     hours, minutes, seconds = map(int, value.split(":"))
     return hours * 3600 + minutes * 60 + seconds
@@ -654,6 +713,156 @@ def route_wait_minutes(route_id: str, route_styles: dict, route_waits: Dict[str,
     return route_waits.get(route_id, AGENCY_WAIT_OVERRIDES.get(agency_id, DEFAULT_BOARD_WAIT))
 
 
+OSI_NAME_ALIASES = {
+    "balham": "balham",
+    "blackfriars": "blackfriars",
+    "charing x": "charing cross",
+    "edgware rd b": "edgware road bakerloo",
+    "edgware rd c&h": "edgware road circle line",
+    "elephant & c": "elephant & castle",
+    "euston": "euston",
+    "finchley rd": "finchley road",
+    "finsbury pk": "finsbury park",
+    "hammersmith c&h": "hammersmith h&c",
+    "hammersmith d&p": "hammersmith dist&picc",
+    "kings cross": "kings cross st pancras",
+    "oxford circ": "oxford circus",
+    "tottenham ct rd": "tottenham court road",
+    "tower gatewy dlr": "tower gateway",
+    "tower gatewy": "tower gateway",
+    "custom house": "custom house for excel",
+    "shepherds bsh": "shepherds bush central",
+    "tottenham h": "tottenham hale",
+    "sudbury hil": "sudbury hill",
+    "w india quay": "west india quay",
+    "w hampstead": "west hampstead",
+    "victoria d": "victoria",
+    "victoria v": "victoria",
+    "walthmstow c": "walthamstow central",
+    "woolwch arsn": "woolwich arsenal",
+}
+
+OUT_OF_SCOPE_OSI_NAMES = {
+    "Battersea Park",
+    "Battersea Pwr S",
+    "Bowes Park",
+    "Bromley North",
+    "Bromley South",
+    "Brondesbury",
+    "Camden Road",
+    "Catford",
+    "Catford Bridge",
+    "Clapham High St",
+    "Clock House",
+    "Dalston Junction",
+    "Dalston Kingsld",
+    "Finchley Rd Fgnl",
+    "Forest Gate",
+    "Hackney Central",
+    "Hackney Downs",
+    "Harringay",
+    "Harringay Grn Ln",
+    "Highbury",
+    "Kent House",
+    "Kentish Tn West",
+    "Leytonstone H Rd",
+    "Manor Park",
+    "New Cross",
+    "New Cross Gate",
+    "Penge East",
+    "Penge West",
+    "Putney",
+    "Queenstown Road",
+    "Same NLC OSI",
+    "South Tottenham",
+    "Southend Central",
+    "Southend Victoria",
+    "St Pancras Intl",
+    "Stevenage",
+    "Sudbury Hill Hrw",
+    "Upper Holloway",
+    "Upper Warlingham",
+    "Walthamstow Q Rd",
+    "Walthamstw Qns Rd",
+    "Wanstead Park",
+    "Waterloo E NR",
+    "Welwyn Garden City",
+    "Whyteleafe",
+    "Woodgrange Park",
+    "Woolwich",
+}
+
+
+def is_out_of_scope_osi_name(name: str) -> bool:
+    return (
+        name in OUT_OF_SCOPE_OSI_NAMES
+        or name.endswith(" NR")
+        or name.endswith(" LO")
+        or name.endswith(" EL")
+        or name.endswith(" Tlnk")
+    )
+
+
+def canonical_station_name(name: str) -> str:
+    canonical = name.lower().replace(".", "").replace("'", "").replace(" and ", " & ")
+    canonical = canonical.replace("(dist&picc line)", "dist&picc")
+    canonical = canonical.replace("(h&c line)", "h&c")
+    canonical = canonical.replace("(", " ").replace(")", " ")
+    for suffix in (
+        " underground station",
+        " dlr station",
+        " tram stop",
+        " station",
+        " pier",
+        " lu",
+        " dlr",
+    ):
+        if canonical.endswith(suffix):
+            canonical = canonical[: -len(suffix)]
+    canonical = " ".join(canonical.split())
+    canonical = OSI_NAME_ALIASES.get(canonical, canonical)
+    canonical = re.sub(r"\bst\b", "street", canonical)
+    return OSI_NAME_ALIASES.get(canonical, canonical)
+
+
+def station_name_index(stations: list) -> Dict[str, List[int]]:
+    index: Dict[str, List[int]] = defaultdict(list)
+    for station_index, station in enumerate(stations):
+        index[canonical_station_name(station["name"])].append(station_index)
+    return index
+
+
+def resolve_interchange_edges(
+    edges: Sequence[tuple[str, str, float]],
+    stations: list,
+    label: str,
+) -> tuple[list[tuple[int, int, float]], set[tuple[int, int]], set[str]]:
+    name_index = station_name_index(stations)
+    resolved: list[tuple[int, int, float]] = []
+    official_pairs: set[tuple[int, int]] = set()
+    unmatched: set[str] = set()
+    ignored: set[str] = set()
+    for from_name, to_name, minutes in edges:
+        from_indexes = name_index.get(canonical_station_name(from_name), [])
+        to_indexes = name_index.get(canonical_station_name(to_name), [])
+        if not from_indexes:
+            (ignored if is_out_of_scope_osi_name(from_name) else unmatched).add(from_name)
+        if not to_indexes:
+            (ignored if is_out_of_scope_osi_name(to_name) else unmatched).add(to_name)
+        if not from_indexes or not to_indexes:
+            continue
+        for from_station in from_indexes:
+            for to_station in to_indexes:
+                if from_station == to_station:
+                    continue
+                resolved.append((from_station, to_station, minutes))
+                official_pairs.add((from_station, to_station))
+    print(f"{label} unmatched station names ({len(unmatched)}): {', '.join(sorted(unmatched)) or 'none'}")
+    if ignored:
+        print(f"{label} ignored out-of-scope station names ({len(ignored)}): {', '.join(sorted(ignored))}")
+    return resolved, official_pairs, unmatched
+
+
 def build_graph(
     stations: list,
     station_index_by_id: Dict[str, int],
@@ -661,6 +870,8 @@ def build_graph(
     trips_by_id: dict,
     route_styles: dict,
     route_waits: Dict[str, float],
+    official_interchanges: Sequence[tuple[int, int, float]],
+    official_station_pairs: set[tuple[int, int]],
 ) -> Tuple[list, list, list]:
     durations_by_edge: Dict[Tuple[int, int, str], List[float]] = defaultdict(list)
     current_trip_id = None
@@ -712,6 +923,7 @@ def build_graph(
             station_states[station_index].append(state_index_by_key[(station_index, route_id)])
 
     adjacency = [dict() for _ in route_states]
+    fixed_adjacency = [dict() for _ in route_states]
     for (from_station, to_station, route_id), durations in durations_by_edge.items():
         from_state = state_index_by_key.get((from_station, route_id))
         to_state = state_index_by_key.get((to_station, route_id))
@@ -733,9 +945,18 @@ def build_graph(
                 if existing is None or transfer_cost < existing:
                     adjacency[from_state][to_state] = transfer_cost
 
+    for from_station, to_station, minutes in official_interchanges:
+        for from_state in station_states[from_station]:
+            for to_state in station_states[to_station]:
+                existing = fixed_adjacency[from_state].get(to_state)
+                if existing is None or minutes < existing:
+                    fixed_adjacency[from_state][to_state] = round(minutes, 2)
+
     for i, source in enumerate(stations):
         sx, sy = source["point"]
         for j in range(i + 1, len(stations)):
+            if (i, j) in official_station_pairs or (j, i) in official_station_pairs:
+                continue
             tx, ty = stations[j]["point"]
             distance = math.hypot(tx - sx, ty - sy)
             if distance > INTER_COMPLEX_WALK_RADIUS:
@@ -746,11 +967,11 @@ def build_graph(
                     to_route = route_states[to_state]["routeId"]
                     from_route = route_states[from_state]["routeId"]
                     forward_cost = round(
-                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_wait_minutes(to_route, route_styles, route_waits),
+                        walk_minutes + TRANSFER_PENALTY + route_wait_minutes(to_route, route_styles, route_waits),
                         2,
                     )
                     backward_cost = round(
-                        walk_minutes + INTER_COMPLEX_TRANSFER_PENALTY + route_wait_minutes(from_route, route_styles, route_waits),
+                        walk_minutes + TRANSFER_PENALTY + route_wait_minutes(from_route, route_styles, route_waits),
                         2,
                     )
                     existing_forward = adjacency[from_state].get(to_state)
@@ -763,11 +984,21 @@ def build_graph(
     return (
         route_states,
         station_states,
-        [
-            [[to_index, weight] for to_index, weight in sorted(edges.items())]
-            for edges in adjacency
-        ],
+        build_adjacency_payload(adjacency, fixed_adjacency),
     )
+
+
+def build_adjacency_payload(adjacency: list[dict], fixed_adjacency: list[dict]) -> list:
+    payload = []
+    for edges, fixed_edges in zip(adjacency, fixed_adjacency):
+        row = []
+        for to_index in sorted(set(edges) | set(fixed_edges)):
+            if to_index in fixed_edges:
+                row.append([to_index, fixed_edges[to_index], "fixedInterchange"])
+            else:
+                row.append([to_index, edges[to_index]])
+        payload.append(row)
+    return payload
 
 
 def build_grid_cells(polygons: MultiPolygon, stations: list, bbox: Tuple[float, float, float, float]) -> Tuple[list, list]:
@@ -833,8 +1064,23 @@ def main() -> None:
     missing_trip_agencies = sorted(loaded_agencies - trip_agencies)
     if missing_trip_agencies:
         print(f"Agencies without trips in this feed: {', '.join(missing_trip_agencies)}")
+    osi_edges = load_osi_edges()
+    tram_edges = load_tram_interchange_edges()
+    print(f"OSI edges loaded: {len(osi_edges)}")
+    resolved_osi_edges, osi_station_pairs, _osi_unmatched = resolve_interchange_edges(osi_edges, stations, "OSI")
+    resolved_tram_edges, tram_station_pairs, _tram_unmatched = resolve_interchange_edges(tram_edges, stations, "Tram")
+    official_interchanges = resolved_osi_edges + resolved_tram_edges
+    official_station_pairs = osi_station_pairs | tram_station_pairs
+    print(f"Official interchange edges matched: {len(official_interchanges)}")
     route_states, station_states, adjacency = build_graph(
-        stations, station_index_by_id, stop_to_complex, trips_by_id, route_styles, route_waits
+        stations,
+        station_index_by_id,
+        stop_to_complex,
+        trips_by_id,
+        route_styles,
+        route_waits,
+        official_interchanges,
+        official_station_pairs,
     )
     cells, mask = build_grid_cells(all_polygons, stations, bbox)
 
@@ -851,7 +1097,6 @@ def main() -> None:
             "cellNearestStations": CELL_NEAREST_STATIONS,
             "defaultBoardWait": DEFAULT_BOARD_WAIT,
             "transferPenalty": TRANSFER_PENALTY,
-            "interComplexTransferPenalty": INTER_COMPLEX_TRANSFER_PENALTY,
         },
         "boroughs": boroughs,
         "geography": {
