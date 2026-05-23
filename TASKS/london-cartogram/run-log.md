@@ -67,3 +67,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** 59ec7c1
 - **Verification:** `node --check site/app.js` passed; direct Postcodes.io checks returned `SW1A 1AA` near `51.501,-0.1416` and outcode `E14` near `51.5062,-0.0182`; local browser automation showed `SW1A 1AA` called only `/postcodes/SW1A1AA`, `E14` called only `/outcodes/E14`, `Hampstead` called only bounded Nominatim and pinned near Hampstead Underground, and fake postcode `ZZ99 9ZZ` fell through from Postcodes.io 404 to bounded Nominatim.
 - **Surprises:** `playwright-cli` still could not launch the installed Chrome; UI verification used Playwright Core directly with `/snap/bin/chromium`.
+
+## 2026-05-23T01:04:31Z | UI-4 | done
+
+- **Commit:** a395099
+- **Verification:** Local browser automation loaded `http://localhost:8000/site/` and read the visible bold heads-up note, updated footer source links, author link, and requested GitHub URL; curl returned `200` for all five source-attribution links.
+- **Surprises:** The specified fork repo URL currently returns `404` unauthenticated, but the task explicitly names that URL; source-attribution links all resolve.
