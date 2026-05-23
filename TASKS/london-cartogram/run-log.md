@@ -73,3 +73,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** a395099
 - **Verification:** Local browser automation loaded `http://localhost:8000/site/` and read the visible bold heads-up note, updated footer source links, author link, and requested GitHub URL; curl returned `200` for all five source-attribution links.
 - **Surprises:** The specified fork repo URL currently returns `404` unauthenticated, but the task explicitly names that URL; source-attribution links all resolve.
+
+## 2026-05-23T01:11:50Z | SVG-1 | done
+
+- **Commit:** 465da09
+- **Verification:** `python3 generate_london_rail_cartogram.py` completed and wrote `output/london_rail_cartogram.svg`; `python3 -m py_compile generate_london_rail_cartogram.py` passed; headless Chromium rendered the SVG to a screenshot showing a recognisable London outline with faint internal borough graticule lines; `git log --follow --oneline -- generate_london_rail_cartogram.py` showed `465da09` followed by the original `8db1e9f` history.
+- **Surprises:** None.
