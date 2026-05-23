@@ -55,3 +55,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** 4d3be8d
 - **Verification:** `python3 build_commute_site_data.py` completed; JSON check found `20` labels, projected label points, and `0` borough label keys; local HTTP screenshots at `http://localhost:8000/site/` and `?origin=51.51768,-0.08224` showed neighbourhood labels on unwarped and warped maps with no borough-name labels.
 - **Surprises:** Central London labels needed cartographic nudges from their literal centroids, plus a small text-size reduction, to stay readable at the default viewport.
+
+## 2026-05-23T00:53:48Z | UI-2 | done
+
+- **Commit:** e40a488
+- **Verification:** `python3 build_commute_site_data.py` completed; JSON check found `343` inside-GLA stations, `16` outside-GLA stations, Stanmore/Cockfosters/Upminster inside, Amersham/Chesham outside, `34` outside route segments, `0` outside station references in cell access, and Zone 1 denominator still `69`; local HTTP screenshots showed outside route tails dimmed while the GLA network stayed full strength.
+- **Surprises:** `playwright-cli` still could not launch the installed Chrome, so visual verification used headless Chromium screenshots directly.
