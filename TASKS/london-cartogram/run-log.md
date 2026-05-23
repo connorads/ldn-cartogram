@@ -79,3 +79,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** 465da09
 - **Verification:** `python3 generate_london_rail_cartogram.py` completed and wrote `output/london_rail_cartogram.svg`; `python3 -m py_compile generate_london_rail_cartogram.py` passed; headless Chromium rendered the SVG to a screenshot showing a recognisable London outline with faint internal borough graticule lines; `git log --follow --oneline -- generate_london_rail_cartogram.py` showed `465da09` followed by the original `8db1e9f` history.
 - **Surprises:** None.
+
+## 2026-05-23T01:17:24Z | RM-1 | done
+
+- **Commit:** 0426506
+- **Verification:** The old-data grep returned no source matches outside backlog/run-log history; `ls data/` showed only London-relevant files; `python3 build_commute_site_data.py && python3 generate_london_rail_cartogram.py` completed and wrote both generated outputs; generated commute data has `0` parks, `0` streets, and `0` external land polygons until London OSM basemap extracts are added.
+- **Surprises:** Removing the US county KML parser still requires keeping `ElementTree` imported because the TfL OSI `.ods` parser uses it.
