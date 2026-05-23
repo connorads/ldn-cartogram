@@ -1,0 +1,24 @@
+{
+  "labels": [
+    { "name": "Soho", "lon": -0.1540, "lat": 51.5110 },
+    { "name": "Shoreditch", "lon": -0.0500, "lat": 51.5235 },
+    { "name": "Brixton", "lon": -0.1148, "lat": 51.4626 },
+    { "name": "Canary Wharf", "lon": -0.0100, "lat": 51.5035 },
+    { "name": "Stratford", "lon": -0.0042, "lat": 51.5416 },
+    { "name": "Wimbledon", "lon": -0.2050, "lat": 51.4214 },
+    { "name": "Camden", "lon": -0.1640, "lat": 51.5425 },
+    { "name": "Hampstead", "lon": -0.1786, "lat": 51.5563 },
+    { "name": "Notting Hill", "lon": -0.2290, "lat": 51.5190 },
+    { "name": "Greenwich", "lon": 0.0098, "lat": 51.4826 },
+    { "name": "Peckham", "lon": -0.0600, "lat": 51.4705 },
+    { "name": "Clapham", "lon": -0.1560, "lat": 51.4570 },
+    { "name": "Hackney", "lon": -0.0320, "lat": 51.5480 },
+    { "name": "Islington", "lon": -0.1000, "lat": 51.5580 },
+    { "name": "Kensington", "lon": -0.2190, "lat": 51.4945 },
+    { "name": "Richmond", "lon": -0.3037, "lat": 51.4613 },
+    { "name": "Croydon", "lon": -0.0982, "lat": 51.3762 },
+    { "name": "Walthamstow", "lon": -0.0211, "lat": 51.5836 },
+    { "name": "Ealing", "lon": -0.3014, "lat": 51.5130 },
+    { "name": "Bermondsey", "lon": -0.0550, "lat": 51.4885 }
+  ]
+}

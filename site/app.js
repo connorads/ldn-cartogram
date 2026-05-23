@@ -1210,21 +1210,19 @@ function drawStations(drawCtx, projectPoint) {
   }
 }
 
-function drawBoroughLabels(drawCtx, projectPoint) {
-  // Neighbourhood labels are supplied by a later London-specific task.
-  if (!state.data.boroughs.some((borough) => borough.label)) return;
-  drawCtx.font = '700 15px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
+function drawNeighbourhoodLabels(drawCtx, projectPoint) {
+  if (!state.data.labels?.length) return;
+  drawCtx.font = '700 13px "Avenir Next", "Helvetica Neue", Helvetica, sans-serif';
   drawCtx.textAlign = "center";
   drawCtx.textBaseline = "middle";
   drawCtx.fillStyle = "#17304d";
   drawCtx.strokeStyle = "rgba(255,252,247,0.95)";
-  drawCtx.lineWidth = 6;
+  drawCtx.lineWidth = 5;
   drawCtx.lineJoin = "round";
-  for (const borough of state.data.boroughs) {
-    if (!borough.label) continue;
-    const [lx, ly] = projectPoint(borough.label);
-    drawCtx.strokeText(borough.name, lx, ly);
-    drawCtx.fillText(borough.name, lx, ly);
+  for (const label of state.data.labels) {
+    const [lx, ly] = projectPoint(label.point);
+    drawCtx.strokeText(label.name, lx, ly);
+    drawCtx.fillText(label.name, lx, ly);
   }
 }
 
@@ -1876,7 +1874,7 @@ function drawMap(drawCtx, width, height) {
     drawExternalLand(drawCtx, projectPoint);
     drawCityBasemap(drawCtx, projectPoint);
     drawStations(drawCtx, projectPoint);
-    drawBoroughLabels(drawCtx, projectPoint);
+    drawNeighbourhoodLabels(drawCtx, projectPoint);
     if (state.cursorScreen) {
       drawMarker(drawCtx, state.cursorScreen, "#d75c2e", 24, 5.5);
     }
@@ -1971,7 +1969,7 @@ function drawMap(drawCtx, width, height) {
   const station = nearest ? state.data.stations[nearest.index] : null;
 
   drawStations(drawCtx, projectPoint);
-  drawBoroughLabels(drawCtx, projectPoint);
+  drawNeighbourhoodLabels(drawCtx, projectPoint);
 
   if (state.originPoint) {
     const originScreen = projectPoint(state.originPoint);

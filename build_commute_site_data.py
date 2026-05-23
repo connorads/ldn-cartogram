@@ -23,6 +23,7 @@ SITE_DATA_PATH = ROOT / "site" / "data" / "commute_map_data.json"
 BOROUGHS_PATH = DATA_DIR / "uk_lad_boundaries.geojson"
 TFL_OSI_PATH = DATA_DIR / "tfl_osi.ods"
 TRAM_INTERCHANGES_PATH = DATA_DIR / "tram_interchanges.json"
+NEIGHBOURHOOD_LABELS_PATH = DATA_DIR / "neighbourhood_labels.json"
 PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
 STREETS_PATH = DATA_DIR / "osm_major_streets.json"
 GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
@@ -369,6 +370,19 @@ def extract_boroughs(payload: dict, lat0: float) -> Tuple[list, MultiPolygon]:
             }
         )
     return boroughs, union_outline_from_features(london_features, lat0)
+
+
+def load_neighbourhood_labels(lat0: float) -> list:
+    payload = load_json(NEIGHBOURHOOD_LABELS_PATH)
+    labels = []
+    for item in payload.get("labels", []):
+        labels.append(
+            {
+                "name": item["name"],
+                "point": round_point(lonlat_to_xy(float(item["lon"]), float(item["lat"]), lat0)),
+            }
+        )
+    return labels
 
 
 def extract_parks(lat0: float, bbox: Tuple[float, float, float, float]) -> list:
@@ -1203,6 +1217,7 @@ def main() -> None:
     borough_payload = load_json(BOROUGHS_PATH)
     lat0 = average_borough_latitude(borough_payload)
     boroughs, all_polygons = extract_boroughs(borough_payload, lat0)
+    labels = load_neighbourhood_labels(lat0)
     bbox = bounds_of_multipolygon(all_polygons)
     external_land = build_external_land_polygons(lat0, bbox, all_polygons)
     parks = extract_parks(lat0, bbox)
@@ -1268,6 +1283,7 @@ def main() -> None:
             "centralReachabilityThresholdMinutes": int(REACHABILITY_THRESHOLD_MINUTES),
         },
         "boroughs": boroughs,
+        "labels": labels,
         "geography": {
             "outline": [[round_path(ring) for ring in polygon] for polygon in all_polygons],
             "boroughs": boroughs,

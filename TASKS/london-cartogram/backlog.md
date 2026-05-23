@@ -307,7 +307,7 @@ Global verification rules:
 
 ## Phase 5 — UI polish
 
-### [ ] **UI-1: Curated neighbourhood labels replace borough labels** | **Size: S** | **Deps: BUILD-2**
+### [x] **UI-1: Curated neighbourhood labels replace borough labels** | **Size: S** | **Deps: BUILD-2**
 
 **Problem:** With 33 GLA boroughs, labelling each is illegible noise (Q5). Replace with ~20 curated neighbourhood labels that Londoners actually orient by.
 
