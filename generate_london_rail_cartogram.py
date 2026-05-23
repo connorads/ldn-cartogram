@@ -1,29 +1,32 @@
 #!/usr/bin/env python3
-"""Generate an NYC subway-access weighted map with streets, parks, and subway lines."""
+"""Generate a London rail-access weighted map with streets, parks, and transport lines."""
 
 from __future__ import annotations
 
 import csv
 import json
 import math
-import urllib.request
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Sequence, Tuple
 
+from build_commute_site_data import (
+    average_borough_latitude as london_average_borough_latitude,
+    extract_boroughs as extract_london_boroughs,
+)
+
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "data"
 OUTPUT_DIR = ROOT / "output"
 
-BOROUGHS_URL = "https://data.cityofnewyork.us/resource/gthc-hcne.geojson?$limit=100"
-BOROUGHS_PATH = DATA_DIR / "borough_boundaries.geojson"
+BOROUGHS_PATH = DATA_DIR / "uk_lad_boundaries.geojson"
 PARKS_PATH = DATA_DIR / "parks_open_space.geojson"
 STREETS_PATH = DATA_DIR / "osm_major_streets.json"
-GTFS_PATH = DATA_DIR / "mta_gtfs_subway.zip"
-OUTPUT_PATH = OUTPUT_DIR / "nyc_subway_weighted_projection.svg"
+GTFS_PATH = DATA_DIR / "tfl_gtfs.zip"
+OUTPUT_PATH = OUTPUT_DIR / "london_rail_cartogram.svg"
 
 SVG_WIDTH = 1500
 SVG_HEIGHT = 920
@@ -39,6 +42,7 @@ CIRCUITY_FACTOR = 1.25
 
 MIN_PARK_AREA = 50_000.0
 MAX_SHAPES_PER_ROUTE_DIRECTION = 3
+IN_SCOPE_AGENCIES = {"LUL", "DLR", "TCL", "CV", "WFF", "CAB"}
 
 Point = Tuple[float, float]
 Ring = List[Point]
@@ -74,13 +78,6 @@ def ensure_dirs() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def download_if_missing(url: str, target: Path) -> None:
-    if target.exists():
-        return
-    with urllib.request.urlopen(url) as response:
-        target.write_bytes(response.read())
-
-
 def load_json(path: Path) -> dict | list:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
@@ -90,21 +87,6 @@ def lonlat_to_xy(lon: float, lat: float, lat0: float) -> Point:
     meters_per_deg_lat = 111_320.0
     meters_per_deg_lon = meters_per_deg_lat * math.cos(math.radians(lat0))
     return lon * meters_per_deg_lon, lat * meters_per_deg_lat
-
-
-def average_borough_latitude(payload: dict) -> float:
-    total = 0.0
-    count = 0
-    for feature in payload["features"]:
-        geometry = feature["geometry"]
-        if geometry["type"] != "MultiPolygon":
-            continue
-        for polygon in geometry["coordinates"]:
-            for ring in polygon:
-                for _, lat in ring:
-                    total += lat
-                    count += 1
-    return total / max(count, 1)
 
 
 def ring_area(ring: Sequence[Point]) -> float:
@@ -161,27 +143,17 @@ def simplify_ring(ring: Sequence[Point], min_distance: float) -> Ring:
     return simplified
 
 
-def extract_boroughs(payload: dict, lat0: float) -> List[Borough]:
-    boroughs: List[Borough] = []
-    for feature in payload["features"]:
-        geometry = feature["geometry"]
-        if geometry["type"] != "MultiPolygon":
-            continue
-        multipolygon: MultiPolygon = []
-        for polygon_coords in geometry["coordinates"]:
-            polygon: Polygon = []
-            for ring_coords in polygon_coords:
-                ring = [lonlat_to_xy(lon, lat, lat0) for lon, lat in ring_coords]
-                polygon.append(simplify_ring(ring, 80.0))
-            multipolygon.append(polygon)
-        boroughs.append(
-            Borough(
-                name=feature["properties"]["boroname"],
-                geometry=multipolygon,
-                label_point=largest_polygon_label_point(multipolygon),
-            )
+def extract_london_boundaries(payload: dict, lat0: float) -> Tuple[List[Borough], MultiPolygon]:
+    borough_payloads, union_outline = extract_london_boroughs(payload, lat0)
+    boroughs = [
+        Borough(
+            name=borough["name"],
+            geometry=borough["polygons"],
+            label_point=largest_polygon_label_point(borough["polygons"]),
         )
-    return boroughs
+        for borough in borough_payloads
+    ]
+    return boroughs, union_outline
 
 
 def point_in_ring(point: Point, ring: Sequence[Point]) -> bool:
@@ -305,20 +277,26 @@ def read_csv_from_zip(gtfs_path: Path, member: str) -> Iterable[dict]:
 
 
 def extract_station_points(gtfs_path: Path, lat0: float) -> List[Point]:
-    stations: List[Point] = []
+    station_totals: Dict[str, Tuple[float, float, int]] = {}
     for row in read_csv_from_zip(gtfs_path, "stops.txt"):
-        if row.get("location_type") != "1":
+        if row.get("stop_lat") in {"", None} or row.get("stop_lon") in {"", None}:
             continue
+        stop_name = row["stop_name"].strip()
         lat = float(row["stop_lat"])
         lon = float(row["stop_lon"])
-        stations.append(lonlat_to_xy(lon, lat, lat0))
-    return stations
+        total_lon, total_lat, count = station_totals.get(stop_name, (0.0, 0.0, 0))
+        station_totals[stop_name] = (total_lon + lon, total_lat + lat, count + 1)
+    return [
+        lonlat_to_xy(total_lon / count, total_lat / count, lat0)
+        for total_lon, total_lat, count in station_totals.values()
+        if count > 0
+    ]
 
 
 def extract_route_shapes(gtfs_path: Path, lat0: float, bbox: PolygonBox) -> List[RouteShape]:
     route_styles: Dict[str, Tuple[str, str]] = {}
     for row in read_csv_from_zip(gtfs_path, "routes.txt"):
-        if row.get("route_type") != "1":
+        if row.get("agency_id") not in IN_SCOPE_AGENCIES:
             continue
         route_styles[row["route_id"]] = (
             f"#{row['route_color'] or '808183'}",
@@ -586,16 +564,15 @@ def street_width(kind: str) -> float:
 
 def draw_panel_layers(
     svg_parts: List[str],
-    borough_shapes: MultiPolygon,
+    outline_shapes: MultiPolygon,
+    graticule_shapes: MultiPolygon,
     parks: MultiPolygon,
     streets: Sequence[StreetLine],
     route_shapes: Sequence[RouteShape],
     station_points: Sequence[Point],
-    label_points: Sequence[Point],
-    borough_names: Sequence[str],
     transform,
 ) -> None:
-    for polygon in borough_shapes:
+    for polygon in outline_shapes:
         svg_parts.append(f'<path d="{svg_path_for_polygon(polygon, transform)}" class="borough-fill" />')
 
     for polygon in parks:
@@ -613,22 +590,22 @@ def draw_panel_layers(
             f'class="route-line" style="stroke:{route_shape.color}" />'
         )
 
-    for polygon in borough_shapes:
+    for polygon in outline_shapes:
         svg_parts.append(f'<path d="{svg_path_for_polygon(polygon, transform)}" class="borough-outline" />')
+
+    for polygon in graticule_shapes:
+        svg_parts.append(f'<path d="{svg_path_for_polygon(polygon, transform)}" class="borough-graticule" />')
 
     for x, y in station_points:
         tx, ty = transform((x, y))
         svg_parts.append(f'<circle cx="{tx:.2f}" cy="{ty:.2f}" r="1.3" class="station-dot" />')
 
-    for name, point in zip(borough_names, label_points):
-        tx, ty = transform(point)
-        svg_parts.append(f'<text x="{tx:.2f}" y="{ty:.2f}" class="label">{name}</text>')
-
 
 def write_svg(
-    boroughs: Sequence[Borough],
-    borough_shapes: MultiPolygon,
-    warped_borough_shapes: MultiPolygon,
+    outline_shapes: MultiPolygon,
+    warped_outline_shapes: MultiPolygon,
+    graticule_shapes: MultiPolygon,
+    warped_graticule_shapes: MultiPolygon,
     parks: MultiPolygon,
     warped_parks: MultiPolygon,
     streets: Sequence[StreetLine],
@@ -637,11 +614,10 @@ def write_svg(
     warped_route_shapes: Sequence[RouteShape],
     stations: Sequence[Point],
     warped_stations: Sequence[Point],
-    warped_label_points: Sequence[Point],
     output_path: Path,
 ) -> None:
-    original_bbox = bounds_of_multipolygon(borough_shapes)
-    warped_bbox = bounds_of_multipolygon(warped_borough_shapes)
+    original_bbox = bounds_of_multipolygon(outline_shapes)
+    warped_bbox = bounds_of_multipolygon(warped_outline_shapes)
 
     panel_width = (SVG_WIDTH - PANEL_GAP - (2 * PADDING)) / 2
     panel_height = SVG_HEIGHT - (2 * PADDING) - 76
@@ -660,23 +636,23 @@ def write_svg(
         ".panel-title { font-size: 18px; font-weight: 700; fill: #17304d; }",
         ".borough-fill { fill: #f4f7fb; stroke: none; }",
         ".borough-outline { fill: none; stroke: #4c6a8f; stroke-width: 1.2; }",
+        ".borough-graticule { fill: none; stroke: #17304d; stroke-width: 0.75; stroke-opacity: 0.25; }",
         ".park-fill { fill: #d8ead0; stroke: #a8c79a; stroke-width: 0.4; }",
         ".street-line { fill: none; stroke: #d6dde6; stroke-linecap: round; stroke-linejoin: round; opacity: 0.9; }",
         ".route-line { fill: none; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; opacity: 0.92; }",
         ".station-dot { fill: #ffffff; stroke: #56697f; stroke-width: 0.6; }",
-        ".label { font-size: 15px; font-weight: 700; fill: #17304d; text-anchor: middle; paint-order: stroke; stroke: #fcfdff; stroke-width: 4px; stroke-linejoin: round; }",
         ".note { font-size: 13px; fill: #425466; }",
         ".frame { fill: none; stroke: #d8e2ea; stroke-width: 1; }",
         "</style>",
         '<rect width="100%" height="100%" fill="#fcfdff" />',
-        f'<text x="{PADDING}" y="34" class="title">NYC subway-access weighted projection</text>',
+        f'<text x="{PADDING}" y="34" class="title">London rail-access weighted projection</text>',
         (
             f'<text x="{PADDING}" y="58" class="subtitle">'
-            "Shared projection, official route colors, and added streets and parks keep the subway network aligned with the map."
+            "London - Tube, DLR, Tram, Clippers, Woolwich Ferry, Cable Car."
             "</text>"
         ),
         f'<text x="{PADDING}" y="90" class="panel-title">Reference geography</text>',
-        f'<text x="{PADDING + panel_width + PANEL_GAP}" y="90" class="panel-title">Warped by subway access</text>',
+        f'<text x="{PADDING + panel_width + PANEL_GAP}" y="90" class="panel-title">Warped by rail access</text>',
         f'<rect x="{PADDING}" y="{PADDING + 52}" width="{panel_width}" height="{panel_height}" class="frame" rx="10" />',
         (
             f'<rect x="{PADDING + panel_width + PANEL_GAP}" y="{PADDING + 52}" '
@@ -686,30 +662,28 @@ def write_svg(
 
     draw_panel_layers(
         svg_parts=svg_parts,
-        borough_shapes=borough_shapes,
+        outline_shapes=outline_shapes,
+        graticule_shapes=graticule_shapes,
         parks=parks,
         streets=streets,
         route_shapes=route_shapes,
         station_points=stations,
-        label_points=[borough.label_point for borough in boroughs],
-        borough_names=[borough.name for borough in boroughs],
         transform=left_transform,
     )
     draw_panel_layers(
         svg_parts=svg_parts,
-        borough_shapes=warped_borough_shapes,
+        outline_shapes=warped_outline_shapes,
+        graticule_shapes=warped_graticule_shapes,
         parks=warped_parks,
         streets=warped_streets,
         route_shapes=warped_route_shapes,
         station_points=warped_stations,
-        label_points=warped_label_points,
-        borough_names=[borough.name for borough in boroughs],
         transform=right_transform,
     )
 
     svg_parts.extend(
         [
-            f'<text x="{PADDING}" y="{SVG_HEIGHT - 42}" class="note">Data: NYC Open Data borough boundaries, NYC Parks open space, OSM major streets, and MTA GTFS subway routes.</text>',
+            f'<text x="{PADDING}" y="{SVG_HEIGHT - 42}" class="note">Data: ONS Open Geography LAD boundaries, OSM parks and streets, Transitland TfL GTFS routes.</text>',
             (
                 f'<text x="{PADDING}" y="{SVG_HEIGHT - 22}" class="note">'
                 f"Parameters: decay={int(DECAY_METERS)}m, circuity={CIRCUITY_FACTOR:.2f}, grid={GRID_COLS}x{GRID_ROWS}."
@@ -724,14 +698,13 @@ def write_svg(
 
 def main() -> None:
     ensure_dirs()
-    download_if_missing(BOROUGHS_URL, BOROUGHS_PATH)
 
     borough_payload = load_json(BOROUGHS_PATH)
-    lat0 = average_borough_latitude(borough_payload)
+    lat0 = london_average_borough_latitude(borough_payload)
 
-    boroughs = extract_boroughs(borough_payload, lat0)
-    borough_shapes = [polygon for borough in boroughs for polygon in borough.geometry]
-    bbox = bounds_of_multipolygon(borough_shapes)
+    boroughs, outline_shapes = extract_london_boundaries(borough_payload, lat0)
+    graticule_shapes = [polygon for borough in boroughs for polygon in borough.geometry]
+    bbox = bounds_of_multipolygon(outline_shapes)
     min_x, min_y, max_x, max_y = bbox
 
     parks = extract_parks(lat0, bbox)
@@ -739,16 +712,19 @@ def main() -> None:
     stations = extract_station_points(GTFS_PATH, lat0)
     route_shapes = extract_route_shapes(GTFS_PATH, lat0, bbox)
 
-    polygon_boxes = build_polygon_boxes(borough_shapes)
-    grid, cell_w, cell_h = build_weight_grid(borough_shapes, polygon_boxes, stations, bbox)
+    polygon_boxes = build_polygon_boxes(outline_shapes)
+    grid, cell_w, cell_h = build_weight_grid(outline_shapes, polygon_boxes, stations, bbox)
     column_masses = normalize_mass(sum(grid[row][col] for row in range(GRID_ROWS)) for col in range(GRID_COLS))
     row_masses = normalize_mass(sum(grid[row]) for row in range(GRID_ROWS))
 
     x_edges = cumulative_edges(column_masses, min_x, max_x - min_x)
     y_edges = cumulative_edges(row_masses, min_y, max_y - min_y)
 
-    warped_borough_shapes = warp_multipolygon(
-        borough_shapes, min_x, min_y, cell_w, cell_h, x_edges, y_edges
+    warped_outline_shapes = warp_multipolygon(
+        outline_shapes, min_x, min_y, cell_w, cell_h, x_edges, y_edges
+    )
+    warped_graticule_shapes = warp_multipolygon(
+        graticule_shapes, min_x, min_y, cell_w, cell_h, x_edges, y_edges
     )
     warped_parks = warp_multipolygon(parks, min_x, min_y, cell_w, cell_h, x_edges, y_edges)
     warped_street_points = warp_lines(
@@ -777,20 +753,11 @@ def main() -> None:
         for route_shape, points in zip(route_shapes, warped_route_points)
     ]
     warped_stations = warp_points(stations, min_x, min_y, cell_w, cell_h, x_edges, y_edges)
-    warped_label_points = warp_points(
-        [borough.label_point for borough in boroughs],
-        min_x,
-        min_y,
-        cell_w,
-        cell_h,
-        x_edges,
-        y_edges,
-    )
-
     write_svg(
-        boroughs=boroughs,
-        borough_shapes=borough_shapes,
-        warped_borough_shapes=warped_borough_shapes,
+        outline_shapes=outline_shapes,
+        warped_outline_shapes=warped_outline_shapes,
+        graticule_shapes=graticule_shapes,
+        warped_graticule_shapes=warped_graticule_shapes,
         parks=parks,
         warped_parks=warped_parks,
         streets=streets,
@@ -799,7 +766,6 @@ def main() -> None:
         warped_route_shapes=warped_route_shapes,
         stations=stations,
         warped_stations=warped_stations,
-        warped_label_points=warped_label_points,
         output_path=OUTPUT_PATH,
     )
     print(f"Wrote {OUTPUT_PATH}")

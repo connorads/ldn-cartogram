@@ -1,23 +1,23 @@
-# NYC Cartogram
+# London Cartogram
 
-This project generates two related artifacts for New York City:
+This project generates two related artifacts for London:
 
 - a static SVG cartogram that expands places with stronger subway access and compresses places with weaker access
 - an interactive commute-time web app that lets you pin an origin, inspect travel times, toggle the warp and heatmap layers, and share deep links to a view
 
-Live site: [castrio.me/nyc](https://castrio.me/nyc/)
+Live site: [ldn.connoradams.co.uk](https://ldn.connoradams.co.uk/)
 
 <img width="1080" height="1350" alt="nyc-commute-cartogram-1776285343768" src="https://github.com/user-attachments/assets/e5324236-2a0e-48cd-b504-143b4cedc457" />
 
 ## What The Project Uses
 
-- NYC borough boundaries
-- MTA GTFS subway data for stations, routes, and travel times
+- ONS Greater London borough boundaries
+- TfL GTFS data for Tube, DLR, Tram, Clippers, Woolwich Ferry, and Cable Car stations, routes, and travel times
 - major streets and park/open-space overlays for the basemap
 - a distance-based warp for the static SVG
 - a station-to-station network plus walking access model for the interactive commute map
 
-The interactive app includes the Staten Island Ferry connection, but it does not model buses, regional rail, or real-time schedules.
+The interactive app models the TfL rail and river/cable modes above, but it does not yet model Overground, Elizabeth Line, buses, regional rail, or real-time schedules.
 
 ## Requirements
 
@@ -31,19 +31,18 @@ Both Python scripts use the standard library only, so there is no Python depende
 Run:
 
 ```bash
-python3 generate_nyc_subway_weighted_projection.py
+python3 generate_london_rail_cartogram.py
 ```
 
 Output:
 
 ```text
-output/nyc_subway_weighted_projection.svg
+output/london_rail_cartogram.svg
 ```
 
 Notes:
 
-- If `data/borough_boundaries.geojson` is missing, the script can fetch borough boundaries automatically.
-- The other source files are expected under `data/`.
+- Source files are expected under `data/`.
 
 ## Build The Interactive Site Data
 
@@ -117,7 +116,7 @@ If this is your first local `pnpm` install and Wrangler postinstall steps were b
 
 ## Project Layout
 
-- [generate_nyc_subway_weighted_projection.py](/Users/primaryuser/Desktop/nyc-projection/generate_nyc_subway_weighted_projection.py): builds the static SVG cartogram
+- [generate_london_rail_cartogram.py](/Users/primaryuser/Desktop/nyc-projection/generate_london_rail_cartogram.py): builds the static SVG cartogram
 - [build_commute_site_data.py](/Users/primaryuser/Desktop/nyc-projection/build_commute_site_data.py): builds the interactive site data bundle
 - [site/index.html](/Users/primaryuser/Desktop/nyc-projection/site/index.html): app shell and metadata
 - [site/app.js](/Users/primaryuser/Desktop/nyc-projection/site/app.js): interactive map, search, sharing, and rendering logic
@@ -131,7 +130,7 @@ If this is your first local `pnpm` install and Wrangler postinstall steps were b
 - pin an origin and inspect commute times back to that point
 - toggle warp and heatmap layers
 - zoom and full-screen the map
-- search for NYC addresses
+- search for London addresses and postcodes
 - use browser geolocation when available
 - export and share views, including deep links
 - display a 60-minute reachability score

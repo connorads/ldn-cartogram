@@ -421,7 +421,7 @@ Global verification rules:
 
 ## Phase 6 — Static SVG + cleanup
 
-### [ ] **SVG-1: Static SVG generator port (rename, union outline, graticule)** | **Size: M** | **Deps: BUILD-2, BUILD-4** *(uses the same boundary + interchange logic as the interactive build)*
+### [x] **SVG-1: Static SVG generator port (rename, union outline, graticule)** | **Size: M** | **Deps: BUILD-2, BUILD-4** *(uses the same boundary + interchange logic as the interactive build)*
 
 **Problem:** `generate_nyc_subway_weighted_projection.py` produces a static SVG by warping each of NYC's 5 boroughs individually. The London equivalent needs to warp the unioned GLA outline and render internal borough lines as faint graticule (Q9). Filename should change per the rename strategy (Q11).
 
