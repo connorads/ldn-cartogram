@@ -478,7 +478,7 @@ Global verification rules:
 
 ---
 
-### [ ] **RM-2: Update README for London** | **Size: S** | **Deps: all prior tasks**
+### [x] **RM-2: Update README for London** | **Size: S** | **Deps: all prior tasks**
 
 **Problem:** `README.md` describes the NYC project, references NYC URLs, NYC file paths, MTA data, the upstream's Desktop paths, etc. Rewrite for London.
 
