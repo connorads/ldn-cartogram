@@ -19,3 +19,9 @@ Entries appended by each iteration of the loop. One entry per completed or block
 - **Commit:** 1462301
 - **Verification:** `python3 build_commute_site_data.py` completed and printed `Loaded 6 agencies, 19 routes, 74093 trips across 4 agencies, 359 stations`; spot-check found `Oxford Circus Underground Station`, `Bank DLR Station`, `Bank Underground Station`, `Stratford DLR Station`, and `Stratford Underground Station`; `git grep -n "mta_gtfs_subway" -- build_commute_site_data.py` returned no matches.
 - **Surprises:** the staged Transitland feed has CV and WFF routes but no trips for those agencies; Transitland's current static GTFS URL now requires a token, so the staged feed could not be refreshed anonymously.
+
+## 2026-05-23T00:06:14Z | BUILD-2 | done
+
+- **Commit:** b0f455f
+- **Verification:** `python3 build_commute_site_data.py` completed; output has `33` boroughs, `geography.outline`, `geography.boroughs`, and `landMask`; `python3 -c "import json; d=json.load(open('site/data/commute_map_data.json')); print(len(d.get('boroughs', d.get('geography', {}).get('boroughs', []))))"` prints `33`; `python3 -m http.server 8000` served `http://localhost:8000/site/`; Playwright loaded it with title `London Commute POV | Tube & Rail Cartogram`, status `Drag on the map to place an origin.`, and zero console errors; screenshot saved to `/tmp/ldn-cartogram-build2-loaded.png`.
+- **Surprises:** ONS GeoJSON is EPSG:27700 and mixes Polygon/MultiPolygon geometries, so the build converts OSGB36 coordinates to WGS84 and normalises both geometry types; `/site/` local verification needed a localhost-only asset base while production remains root-relative.
