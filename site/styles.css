@@ -1005,9 +1005,23 @@ canvas {
   }
 
   .hero,
-  .notes,
-  .footer-strip {
+  .notes {
     display: none;
+  }
+
+  .footer-strip {
+    justify-content: center;
+    padding: 12px 16px 16px;
+  }
+
+  .footer-links {
+    display: none;
+  }
+
+  .footer-credit {
+    justify-content: center;
+    text-align: center;
+    font-size: 0.8rem;
   }
 
   .workspace {
