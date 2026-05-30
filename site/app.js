@@ -18,6 +18,12 @@ const DESKTOP_PIN_HIT_RADIUS = 18;
 const HEATMAP_RESOLUTION_SCALE = 2;
 const HEATMAP_BLUR_PX = 7;
 const HEATMAP_ALPHA = 0.8;
+// Fade the heatmap out toward the far end so distant/unreachable cells reveal the
+// plain land colour instead of collapsing to a solid blue slab. Below FADE_START
+// (as a fraction of maxTransitTime) cells stay fully opaque; past it they ramp down
+// to FADE_FLOOR by the time budget, so the colour "hugs" the reachable area.
+const HEATMAP_FADE_START = 0.6;
+const HEATMAP_FADE_FLOOR = 0;
 const WARP_INFLUENCE_RADIUS = 8;
 const WARP_SIGMA_CELLS = 3.4;
 const WARP_DISPLACEMENT_SCALE = 1.0;
@@ -859,6 +865,14 @@ function heatmapColor(minutes, alpha = 0.56) {
   const mix = (t - left.t) / ((right.t - left.t) || 1);
   const rgb = left.color.map((value, index) => Math.round(value + (right.color[index] - value) * mix));
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${alpha})`;
+}
+
+// Per-cell opacity for the heatmap: full near the origin, fading to FADE_FLOOR by the
+// time budget so the far field doesn't paint a flat blue background.
+function heatmapFadeAlpha(minutes) {
+  const t = clamp(minutes / currentTravelSettings().maxTransitTime, 0, 1);
+  const fade = smoothstep(HEATMAP_FADE_START, 1, t);
+  return 1 - (1 - HEATMAP_FADE_FLOOR) * fade;
 }
 
 function minuteToAreaWeight(minutes) {
@@ -1767,7 +1781,10 @@ function drawHeatmap(drawCtx, warp, transform, useWarpGeometry = true) {
   for (let row = 0; row < gridRows; row += 1) {
     for (let col = 0; col < gridCols; col += 1) {
       if (!warp.validMask[row][col]) continue;
-      rawCtx.fillStyle = heatmapColor(warp.minutes[row][col], 1);
+      const cellMinutes = warp.minutes[row][col];
+      const fadeAlpha = heatmapFadeAlpha(cellMinutes);
+      if (fadeAlpha <= 0) continue;
+      rawCtx.fillStyle = heatmapColor(cellMinutes, fadeAlpha);
       if (useWarpGeometry) {
         const p00 = transform.toScreen(warp.warpNodes[row][col]);
         const p10 = transform.toScreen(warp.warpNodes[row][col + 1]);
