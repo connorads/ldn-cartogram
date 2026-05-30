@@ -5,8 +5,8 @@
   "compatibility_date": "2026-04-13",
   "routes": [
     {
-      "pattern": "ldn.connoradams.co.uk/*",
-      "zone_name": "connoradams.co.uk"
+      "pattern": "ldn.connoradams.co.uk",
+      "custom_domain": true
     }
   ],
   "assets": {
