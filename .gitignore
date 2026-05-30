@@ -12,7 +12,10 @@ __pycache__/
 venv/
 env/
 output/
-site/data/
+# Generated commute data: ignore the dir but commit the one artifact Cloudflare
+# needs at build time (clean CI checkout has no local build).
+site/data/*
+!site/data/commute_map_data.json
 .DS_Store
 
 *.swp
