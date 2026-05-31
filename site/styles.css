@@ -924,13 +924,19 @@ canvas {
   border-top: 1px solid rgba(23, 48, 77, 0.1);
 }
 
-.footer-links,
-.footer-credit {
+.footer-links {
   display: flex;
   align-items: center;
   gap: 10px 14px;
   flex-wrap: wrap;
   margin: 0;
+}
+
+/* A sentence, not a list: keep normal inline flow so punctuation hugs the
+   preceding word. Flex+gap here inserts gaps before each "," / "." */
+.footer-credit {
+  margin: 0;
+  line-height: 1.6;
 }
 
 .footer-strip a {
@@ -1019,7 +1025,6 @@ canvas {
   }
 
   .footer-credit {
-    justify-content: center;
     text-align: center;
     font-size: 0.8rem;
   }
