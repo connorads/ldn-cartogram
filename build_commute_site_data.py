@@ -40,7 +40,6 @@ ACCESS_WALK_METERS_PER_MINUTE = 75.0
 STATION_ACCESS_PENALTY = 3.5
 CELL_NEAREST_STATIONS = 4
 ORIGIN_NEAREST_STATIONS = 5
-MAX_SHAPES_PER_ROUTE_DIRECTION = 2
 INTER_COMPLEX_WALK_RADIUS = 260.0
 INTER_COMPLEX_WALK_PENALTY = 2.0
 DEFAULT_BOARD_WAIT = 4.0
@@ -606,7 +605,48 @@ def build_route_segments(points: Sequence[Point], gla_polygons: MultiPolygon) ->
     ]
 
 
-def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float], gla_polygons: MultiPolygon) -> Tuple[dict, list, dict]:
+def build_route_network_geometry(
+    route_edges: Dict[str, set],
+    stations: list,
+    route_styles: dict,
+    gla_polygons: MultiPolygon,
+) -> list:
+    """Draw every branch as straight station-to-station chords.
+
+    Geometry comes from the served `stop_times` adjacency (route_edges), the same
+    source as the routing graph — not the synthetic single-branch shapes.txt. Each
+    chord endpoint is `stations[i]["point"]`, the exact world coordinate emitted as
+    the station dot, so lines stay anchored on dots under any client-side warp/zoom.
+    """
+    route_shapes = []
+    for route_id, edges in route_edges.items():
+        style = route_styles.get(route_id)
+        if not style:
+            continue
+        segments = []
+        for a, b in edges:
+            segments.extend(
+                build_route_segments(
+                    [stations[a]["point"], stations[b]["point"]],
+                    gla_polygons,
+                )
+            )
+        if not segments:
+            continue
+        route_shapes.append(
+            {
+                "routeId": route_id,
+                "color": style["color"],
+                "textColor": style["textColor"],
+                "label": style["label"],
+                "points": [],
+                "segments": segments,
+            }
+        )
+    return route_shapes
+
+
+def build_route_styles_and_trips() -> Tuple[dict, dict]:
     in_scope_agencies = load_in_scope_agencies()
     route_styles = {}
     for row in read_csv_from_zip(GTFS_PATH, "routes.txt"):
@@ -621,7 +661,6 @@ def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]
         }
 
     trips_by_id = {}
-    shape_counts: Dict[Tuple[str, str], Counter[str]] = {}
     for row in read_csv_from_zip(GTFS_PATH, "trips.txt"):
         route_id = row["route_id"]
         if route_id not in route_styles:
@@ -632,38 +671,8 @@ def build_routes_and_shapes(lat0: float, bbox: Tuple[float, float, float, float]
             "direction_id": row.get("direction_id", "0"),
             "service_id": row.get("service_id", ""),
         }
-        shape_counts.setdefault((route_id, row.get("direction_id", "0")), Counter())[row["shape_id"]] += 1
 
-    selected_shape_ids = {}
-    for (route_id, _direction), counter in shape_counts.items():
-        for shape_id, _count in counter.most_common(MAX_SHAPES_PER_ROUTE_DIRECTION):
-            selected_shape_ids[shape_id] = route_id
-
-    points_by_shape = defaultdict(list)
-    for row in read_csv_from_zip(GTFS_PATH, "shapes.txt"):
-        shape_id = row["shape_id"]
-        if shape_id not in selected_shape_ids:
-            continue
-        point = lonlat_to_xy(float(row["shape_pt_lon"]), float(row["shape_pt_lat"]), lat0)
-        points_by_shape[shape_id].append((int(row["shape_pt_sequence"]), point))
-
-    shapes = []
-    for shape_id, route_id in selected_shape_ids.items():
-        points = [point for _, point in sorted(points_by_shape.get(shape_id, []))]
-        points = simplify_polyline(points, 90.0)
-        if len(points) < 2 or not bbox_intersects(bounds_of_points(points), bbox):
-            continue
-        shapes.append(
-            {
-                "routeId": route_id,
-                "color": route_styles[route_id]["color"],
-                "textColor": route_styles[route_id]["textColor"],
-                "label": route_styles[route_id]["label"],
-                "points": round_path(points),
-                "segments": build_route_segments(points, gla_polygons),
-            }
-        )
-    return route_styles, shapes, trips_by_id
+    return route_styles, trips_by_id
 
 
 def build_route_waits(trips_by_id: dict, route_styles: dict) -> Dict[str, float]:
@@ -872,8 +881,12 @@ def build_graph(
     route_waits: Dict[str, float],
     official_interchanges: Sequence[tuple[int, int, float]],
     official_station_pairs: set[tuple[int, int]],
-) -> Tuple[list, list, list]:
+) -> Tuple[list, list, list, Dict[str, set]]:
     durations_by_edge: Dict[Tuple[int, int, str], List[float]] = defaultdict(list)
+    # Undirected, deduped station-complex adjacency per route — every served
+    # branch, not just the single synthetic shape per direction. Drives the
+    # drawn route geometry (build_route_network_geometry).
+    route_edges: Dict[str, set] = defaultdict(set)
     current_trip_id = None
     current_rows: List[dict] = []
 
@@ -895,10 +908,14 @@ def build_graph(
                 continue
             if from_complex not in station_index_by_id or to_complex not in station_index_by_id:
                 continue
+            from_index = station_index_by_id[from_complex]
+            to_index = station_index_by_id[to_complex]
+            # Record geometry for every served adjacency, above the timing gate —
+            # that gate is for travel-time weighting only, not for which edges exist.
+            edge = (from_index, to_index) if from_index < to_index else (to_index, from_index)
+            route_edges[route_id].add(edge)
             duration_seconds = parse_gtfs_time(nxt["arrival_time"]) - parse_gtfs_time(prev["departure_time"])
             if 20 <= duration_seconds <= 1800:
-                from_index = station_index_by_id[from_complex]
-                to_index = station_index_by_id[to_complex]
                 durations_by_edge[(from_index, to_index, route_id)].append(duration_seconds / 60.0)
 
     for row in read_csv_from_zip(GTFS_PATH, "stop_times.txt"):
@@ -985,6 +1002,7 @@ def build_graph(
         route_states,
         station_states,
         build_adjacency_payload(adjacency, fixed_adjacency),
+        route_edges,
     )
 
 
@@ -1185,7 +1203,7 @@ def main() -> None:
     streets = extract_streets(lat0, bbox)
     stations, station_index_by_id, stop_to_complex = build_station_data(lat0)
     mark_stations_inside_gla(stations, all_polygons)
-    route_styles, route_shapes, trips_by_id = build_routes_and_shapes(lat0, bbox, all_polygons)
+    route_styles, trips_by_id = build_route_styles_and_trips()
     route_waits = build_route_waits(trips_by_id, route_styles)
     loaded_agencies = load_in_scope_agencies()
     trip_agencies = {trip["agency_id"] for trip in trips_by_id.values()}
@@ -1206,7 +1224,7 @@ def main() -> None:
     official_interchanges = resolved_osi_edges + resolved_tram_edges
     official_station_pairs = osi_station_pairs | tram_station_pairs
     print(f"Official interchange edges matched: {len(official_interchanges)}")
-    route_states, station_states, adjacency = build_graph(
+    route_states, station_states, adjacency, route_edges = build_graph(
         stations,
         station_index_by_id,
         stop_to_complex,
@@ -1216,6 +1234,9 @@ def main() -> None:
         official_interchanges,
         official_station_pairs,
     )
+    # Station points are final after build_station_data; derive drawn route
+    # geometry from served adjacency so every branch connects its dots.
+    route_shapes = build_route_network_geometry(route_edges, stations, route_styles, all_polygons)
     enrich_station_zones(stations, route_styles)
     cells, mask = build_grid_cells(all_polygons, stations, bbox)
     central_reachability_station_count = add_zone1_reachability_scores(
